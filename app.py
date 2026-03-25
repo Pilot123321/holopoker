@@ -23,6 +23,10 @@ def broadcast(room_id):
 def index():
     return send_from_directory(os.path.join(BASE, 'static'), 'index.html')
 
+@app.route('/ads.txt')
+def ads_txt():
+    return send_from_directory(os.path.join(BASE, 'static'), 'ads.txt')
+
 @app.route('/socket.io.min.js')
 def sio_js():
     return send_from_directory(os.path.join(BASE, 'static'), 'socket.io.min.js')
