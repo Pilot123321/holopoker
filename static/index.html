@@ -1286,54 +1286,152 @@ function startBGM(){
   ensureAudio();
   bgmStarted=true;
   bgmGain=actx.createGain();
-  bgmGain.gain.value=0.04;
+  bgmGain.gain.value=0.05;
   bgmGain.connect(actx.destination);
 
-  // chord pad layers
+  // master reverb (convolver)
+  const revLen=actx.sampleRate*2.5;
+  const revBuf=actx.createBuffer(2,revLen,actx.sampleRate);
+  for(let ch=0;ch<2;ch++){
+    const d=revBuf.getChannelData(ch);
+    for(let i=0;i<revLen;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(revLen*.25))*.6;
+  }
+  const reverb=actx.createConvolver();reverb.buffer=revBuf;
+  const revGain=actx.createGain();revGain.gain.value=.35;
+  reverb.connect(revGain);revGain.connect(bgmGain);
+  const dryBus=actx.createGain();dryBus.gain.value=.7;dryBus.connect(bgmGain);
+
+  // cyberpunk / synthwave minor chords
   const chords=[
-    [261.6,329.6,392,523.2],  // C maj
-    [220,277.2,329.6,440],    // A min
-    [349.2,440,523.2,698.4],  // F maj
-    [392,493.9,587.3,784],    // G maj
+    [130.8,196,261.6,311.1,523.2],   // Cm
+    [116.5,174.6,233.1,293.7,466.2], // A#/Bb
+    [103.8,155.6,207.7,261.6,415.3], // Ab
+    [116.5,174.6,220,277.2,440],     // Fm/Bb
+    [123.5,185.0,246.9,311.1,493.9], // Eb
+    [110,164.8,220,277.2,440],       // Am
   ];
   let chordIdx=0;
   const oscs=[];
 
+  // arpeggiator pattern
+  let arpInterval=null;
+  function startArp(notes){
+    let step=0;
+    const arpNotes=[notes[2],notes[3],notes[4],notes[3]];
+    clearInterval(arpInterval);
+    arpInterval=setInterval(()=>{
+      const t=actx.currentTime;
+      const f=arpNotes[step%arpNotes.length];
+      // saw → filter for that neon arp sound
+      const o=actx.createOscillator(),g=actx.createGain();
+      const flt=actx.createBiquadFilter();
+      o.type='sawtooth';o.frequency.value=f*2;
+      flt.type='lowpass';flt.frequency.setValueAtTime(3000,t);
+      flt.frequency.exponentialRampToValueAtTime(600,t+.25);flt.Q.value=8;
+      g.gain.setValueAtTime(.18,t);
+      g.gain.setValueAtTime(.18,t+.05);
+      g.gain.exponentialRampToValueAtTime(.001,t+.28);
+      o.connect(flt);flt.connect(g);g.connect(dryBus);g.connect(reverb);
+      o.start(t);o.stop(t+.3);
+      step++;
+    },350);
+  }
+
   function playChord(){
-    // fade out old
+    const t=actx.currentTime;
+    // fade out old pads
     oscs.forEach(o=>{
-      o.g.gain.linearRampToValueAtTime(0,actx.currentTime+1);
-      setTimeout(()=>{try{o.o.stop();}catch(e){}},1500);
+      o.g.gain.linearRampToValueAtTime(0,t+1.5);
+      setTimeout(()=>{try{o.o.stop();o.lfo.stop();}catch(e){}},2000);
     });
     oscs.length=0;
     const notes=chords[chordIdx%chords.length];
     chordIdx++;
-    notes.forEach(f=>{
-      const o=actx.createOscillator(), g=actx.createGain();
-      o.type='sine';o.frequency.value=f;
-      g.gain.setValueAtTime(0,actx.currentTime);
-      g.gain.linearRampToValueAtTime(.5,actx.currentTime+2);
-      // subtle vibrato
-      const lfo=actx.createOscillator(), lg=actx.createGain();
-      lfo.type='sine';lfo.frequency.value=.3+Math.random()*.4;
-      lg.gain.value=1.5;
-      lfo.connect(lg);lg.connect(o.frequency);lfo.start();
-      o.connect(g);g.connect(bgmGain);
-      o.start();
+
+    // deep sub bass
+    const sub=actx.createOscillator(),sg=actx.createGain();
+    sub.type='sine';sub.frequency.value=notes[0];
+    sg.gain.setValueAtTime(0,t);
+    sg.gain.linearRampToValueAtTime(.6,t+1);
+    sg.gain.linearRampToValueAtTime(.3,t+5);
+    sg.gain.linearRampToValueAtTime(0,t+6.5);
+    sub.connect(sg);sg.connect(dryBus);
+    sub.start(t);sub.stop(t+7);
+
+    // filtered saw pads (synthwave texture)
+    [notes[1],notes[2],notes[3]].forEach((f,i)=>{
+      const o=actx.createOscillator(),g=actx.createGain();
+      const flt=actx.createBiquadFilter();
+      o.type='sawtooth';
+      flt.type='lowpass';flt.frequency.value=800+i*200;flt.Q.value=1.5;
+      // slow filter sweep
+      flt.frequency.setValueAtTime(400,t);
+      flt.frequency.linearRampToValueAtTime(1200+i*300,t+3);
+      flt.frequency.linearRampToValueAtTime(500,t+6);
+      o.frequency.value=f;
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(.25,t+2);
+      g.gain.linearRampToValueAtTime(.1,t+5.5);
+      g.gain.linearRampToValueAtTime(0,t+6.8);
+      // detune for width
+      const o2=actx.createOscillator(),g2=actx.createGain();
+      o2.type='sawtooth';o2.frequency.value=f;o2.detune.value=8+i*3;
+      g2.gain.setValueAtTime(0,t);g2.gain.linearRampToValueAtTime(.15,t+2);
+      g2.gain.linearRampToValueAtTime(0,t+6.8);
+      // vibrato
+      const lfo=actx.createOscillator(),lg=actx.createGain();
+      lfo.type='sine';lfo.frequency.value=.2+Math.random()*.3;
+      lg.gain.value=2;lfo.connect(lg);lg.connect(o.frequency);lfo.start(t);
+      o.connect(flt);flt.connect(g);g.connect(dryBus);g.connect(reverb);
+      o2.connect(flt);
+      o.start(t);o2.start(t);o.stop(t+7);o2.stop(t+7);
       oscs.push({o,g,lfo});
     });
-    // add a high shimmer
-    const sh=actx.createOscillator(), sg=actx.createGain();
-    sh.type='sine';sh.frequency.value=notes[3]*2;
-    sg.gain.setValueAtTime(0,actx.currentTime);
-    sg.gain.linearRampToValueAtTime(.12,actx.currentTime+3);
-    sg.gain.linearRampToValueAtTime(0,actx.currentTime+7);
-    sh.connect(sg);sg.connect(bgmGain);
-    sh.start();sh.stop(actx.currentTime+8);
+
+    // high glassy shimmer
+    const hi=actx.createOscillator(),hg=actx.createGain();
+    const hflt=actx.createBiquadFilter();
+    hi.type='sine';hi.frequency.value=notes[4]*2;
+    hflt.type='lowpass';hflt.frequency.value=2000;hflt.Q.value=3;
+    hg.gain.setValueAtTime(0,t+1);
+    hg.gain.linearRampToValueAtTime(.06,t+3);
+    hg.gain.linearRampToValueAtTime(0,t+6.5);
+    hi.connect(hflt);hflt.connect(hg);hg.connect(reverb);
+    hi.start(t);hi.stop(t+7);
+
+    // arp pattern
+    startArp(notes);
+  }
+
+  // lo-fi kick/hat beat
+  function beat(){
+    const t=actx.currentTime;
+    // kick
+    const ko=actx.createOscillator(),kg=actx.createGain();
+    ko.type='sine';ko.frequency.setValueAtTime(120,t);
+    ko.frequency.exponentialRampToValueAtTime(40,t+.12);
+    kg.gain.setValueAtTime(.3,t);
+    kg.gain.exponentialRampToValueAtTime(.001,t+.2);
+    ko.connect(kg);kg.connect(dryBus);
+    ko.start(t);ko.stop(t+.2);
+    // hi-hat
+    setTimeout(()=>{
+      const t2=actx.currentTime;
+      const hb=actx.createBuffer(1,actx.sampleRate*.04,actx.sampleRate);
+      const hd=hb.getChannelData(0);
+      for(let i=0;i<hd.length;i++) hd[i]=(Math.random()*2-1)*(.5-i/hd.length*.5);
+      const hs=actx.createBufferSource(),hg=actx.createGain();
+      const hf=actx.createBiquadFilter();
+      hf.type='highpass';hf.frequency.value=7000;
+      hs.buffer=hb;hg.gain.value=.08;
+      hs.connect(hf);hf.connect(hg);hg.connect(dryBus);
+      hs.start(t2);
+    },350);
   }
 
   playChord();
-  setInterval(playChord,8000);
+  setInterval(playChord,7000);
+  setInterval(beat,700);
   bgmPlaying=true;
 }
 
