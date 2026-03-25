@@ -1033,6 +1033,7 @@ function startRebuyAd(){
       overlay.classList.remove('show');
       doRebuy();
       chipInv[5000] = (chipInv[5000]||0) + 1;
+      lastKnownChips = 5000;
       updateChipDisplay();
       showToast('⟳ REBUY $5,000 — BACK IN THE GAME');
     }
@@ -1045,8 +1046,11 @@ function doCall(){doAction('call');}
 let pendingBet = 0;
 let chipMinRaise = 40;
 /* chip inventory — tracks qty of each denomination */
-let chipInv = {25:4, 100:10, 500:4, 1000:2, 5000:0};
+const INITIAL_CHIPS = {25:4, 100:10, 500:4, 1000:2, 5000:0};
+const INITIAL_TOTAL = 5100; // 2×1000 + 4×500 + 10×100 + 4×25
+let chipInv = {...INITIAL_CHIPS};
 let pendingChips = {25:0, 100:0, 500:0, 1000:0, 5000:0};
+let lastKnownChips = INITIAL_TOTAL;
 
 function addChip(val){
   if(chipInv[val] - pendingChips[val] <= 0) return; // none left
@@ -1071,17 +1075,28 @@ function updateChipDisplay(){
   });
 }
 function rebuildChipInv(totalChips){
-  /* convert total chip value back into denominations — $5K only from rebuy */
-  const saved5k = chipInv[5000] || 0;
-  let rem = totalChips - saved5k * 5000;
-  if(rem < 0) rem = 0;
-  const denoms = [1000,500,100,25];
-  const startQty = {5000:saved5k, 1000:0, 500:0, 100:0, 25:0};
-  for(const d of denoms){
-    startQty[d] = Math.floor(rem/d);
-    rem -= startQty[d]*d;
+  /* If chips haven't changed, don't recalculate */
+  if(totalChips === lastKnownChips && pendingBet === 0) { updateChipDisplay(); return; }
+
+  /* First join or rebuy from 0 — use exact starting distribution */
+  if(totalChips === INITIAL_TOTAL && lastKnownChips <= 0){
+    chipInv = {...INITIAL_CHIPS};
+  } else {
+    /* Apply the delta (won/lost chips) by adjusting inventory */
+    const delta = totalChips - lastKnownChips;
+    if(delta !== 0){
+      const saved5k = chipInv[5000] || 0;
+      let rem = totalChips - saved5k * 5000;
+      if(rem < 0) rem = 0;
+      const denoms = [1000,500,100,25];
+      chipInv = {5000:saved5k, 1000:0, 500:0, 100:0, 25:0};
+      for(const d of denoms){
+        chipInv[d] = Math.floor(rem/d);
+        rem -= chipInv[d]*d;
+      }
+    }
   }
-  chipInv = startQty;
+  lastKnownChips = totalChips;
   for(const k in pendingChips) pendingChips[k]=0;
   pendingBet = 0;
   updateChipDisplay();
