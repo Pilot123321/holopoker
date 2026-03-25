@@ -11,45 +11,47 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 
 rooms = {}      # room_id -> PokerGame
 sid_info = {}   # sid -> (room_id, player_name)
-turn_timers = {}  # room_id -> threading.Timer
-TURN_TIMEOUT = 20  # seconds
-
-
-def cancel_turn_timer(room_id):
-    t = turn_timers.pop(room_id, None)
-    if t:
-        t.cancel()
+turn_timers = {}  # room_id -> turn generation counter
+turn_generation = {}  # room_id -> int (increments each new turn)
+TURN_TIMEOUT = 25  # seconds
 
 
 def start_turn_timer(room_id):
-    cancel_turn_timer(room_id)
+    """Start a background task that will auto-fold after TURN_TIMEOUT."""
     game = rooms.get(room_id)
     if not game or game.state != 'playing':
         return
-    # record when the turn started
+    # Increment generation to invalidate any previous timer
+    gen = turn_generation.get(room_id, 0) + 1
+    turn_generation[room_id] = gen
     game.turn_deadline = time.time() + TURN_TIMEOUT
-    t = threading.Timer(TURN_TIMEOUT, auto_fold, args=[room_id])
-    t.daemon = True
-    t.start()
-    turn_timers[room_id] = t
+
+    def _auto_fold():
+        socketio.sleep(TURN_TIMEOUT)
+        # Only fold if this timer is still the active one
+        if turn_generation.get(room_id) != gen:
+            return
+        g = rooms.get(room_id)
+        if not g or g.state != 'playing':
+            return
+        cp = g.players[g.current_player_idx]
+        g.action(cp['sid'], 'fold')
+        g.last_action = f'{cp["name"]} FOLDS (TIMEOUT)'
+        broadcast_and_timer(room_id)
+
+    socketio.start_background_task(_auto_fold)
 
 
-def auto_fold(room_id):
-    turn_timers.pop(room_id, None)
-    game = rooms.get(room_id)
-    if not game or game.state != 'playing':
-        return
-    cp = game.players[game.current_player_idx]
-    game.action(cp['sid'], 'fold')
-    game.last_action = f'{cp["name"]} FOLDS (TIMEOUT)'
-    broadcast(room_id)
+def cancel_turn_timer(room_id):
+    """Invalidate any running timer by bumping generation."""
+    turn_generation[room_id] = turn_generation.get(room_id, 0) + 1
 
 
 def broadcast(room_id):
+    """Send state to all players — does NOT restart timer."""
     game = rooms.get(room_id)
     if not game:
         return
-    # calculate remaining time for current turn
     turn_remaining = 0
     if game.state == 'playing' and hasattr(game, 'turn_deadline'):
         turn_remaining = max(0, round(game.turn_deadline - time.time()))
@@ -57,8 +59,13 @@ def broadcast(room_id):
         state = game.to_dict(viewer_sid=p['sid'])
         state['turn_timer'] = turn_remaining
         socketio.emit('state', state, to=p['sid'])
-    # start timer for new current player
-    if game.state == 'playing':
+
+
+def broadcast_and_timer(room_id):
+    """Broadcast state AND start a new turn timer."""
+    broadcast(room_id)
+    game = rooms.get(room_id)
+    if game and game.state == 'playing':
         start_turn_timer(room_id)
 
 
@@ -135,7 +142,7 @@ def on_start():
     if not ok:
         emit('err', {'msg': msg})
         return
-    broadcast(room_id)
+    broadcast_and_timer(room_id)
 
 
 @socketio.on('action')
@@ -151,7 +158,7 @@ def on_action(data):
     if not ok:
         emit('err', {'msg': msg})
         return
-    broadcast(room_id)
+    broadcast_and_timer(room_id)
 
 
 @socketio.on('next_hand')
@@ -164,7 +171,7 @@ def on_next():
     if not game:
         return
     game.next_hand()
-    broadcast(room_id)
+    broadcast_and_timer(room_id)
 
 
 @socketio.on('rebuy')
@@ -223,7 +230,7 @@ def on_disconnect():
                 )
                 game._advance()
                 game.last_action = f'{name} FOLDS (DISCONNECTED)'
-            broadcast(room_id)
+            broadcast_and_timer(room_id)
 
 
 if __name__ == '__main__':

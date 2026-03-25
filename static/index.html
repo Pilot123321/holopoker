@@ -238,6 +238,15 @@ body::after{
 #stage-label{font-size:10px;letter-spacing:4px;color:rgba(0,255,204,0.45);}
 #community{display:flex;gap:10px;align-items:center;margin:4px 0;}
 #last-act{font-size:10px;letter-spacing:1px;color:rgba(0,255,204,0.4);max-width:420px;text-align:center;}
+#last-act.timeout{
+  font-size:20px;letter-spacing:4px;color:var(--red);
+  text-shadow:0 0 16px var(--red),0 0 40px rgba(255,51,68,0.5),0 0 80px rgba(255,51,68,0.2);
+  animation:autofoldFlash 0.4s ease-out 3;
+}
+@keyframes autofoldFlash{
+  0%,100%{opacity:1;}
+  50%{opacity:0.4;}
+}
 #drop-zone{
   display:none;
   margin-top:6px;
@@ -1283,7 +1292,10 @@ function render(s){
 
   document.getElementById('pot').textContent=`◈ POT: $${s.pot}`;
   document.getElementById('stage-label').textContent=s.stage?s.stage.toUpperCase():'——';
-  document.getElementById('last-act').textContent=s.last_action||'';
+  const lastActEl=document.getElementById('last-act');
+  lastActEl.textContent=s.last_action||'';
+  const isTimeout=s.last_action&&(s.last_action.includes('TIMEOUT')||s.last_action.includes('DISCONNECTED'));
+  lastActEl.classList.toggle('timeout',isTimeout);
 
   // Community cards
   const comm=document.getElementById('community');
@@ -1424,7 +1436,7 @@ function startTurnCountdown(seconds){
   const textEl=document.getElementById('turn-timer-text');
   timerEl.style.display='block';
   barEl.style.transition='none';
-  barEl.style.width=(seconds/20*100)+'%';
+  barEl.style.width=(seconds/25*100)+'%';
   // force reflow then animate
   void barEl.offsetWidth;
   barEl.style.transition='width 1s linear';
@@ -1440,7 +1452,7 @@ function startTurnCountdown(seconds){
 function updateTimerDisplay(){
   const barEl=document.getElementById('turn-timer-bar');
   const textEl=document.getElementById('turn-timer-text');
-  const pct=Math.max(0,turnSecondsLeft/20*100);
+  const pct=Math.max(0,turnSecondsLeft/25*100);
   barEl.style.width=pct+'%';
   barEl.classList.toggle('urgent',turnSecondsLeft<=5);
   textEl.textContent=turnSecondsLeft>0?`⏱ ${turnSecondsLeft}s`:'';
