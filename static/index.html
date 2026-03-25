@@ -677,6 +677,7 @@ body::after{
     <div class="title">◈ HOLOPOKER</div>
     <div class="room-code" id="room-display">——</div>
     <div class="you-badge" id="you-display">——</div>
+    <button onclick="toggleBGM()" style="background:none;border:1px solid rgba(0,255,204,0.25);color:rgba(0,255,204,0.5);font-size:14px;padding:4px 10px;cursor:pointer;border-radius:2px;font-family:inherit;letter-spacing:2px" title="Toggle Music">♫</button>
   </div>
 
   <div id="main">
@@ -1186,6 +1187,193 @@ function showToast(msg){
   t.textContent='⚠ '+msg;t.style.display='block';
   clearTimeout(toastT);toastT=setTimeout(()=>t.style.display='none',3500);
 }
+
+/* ═══════════════════════════════════════════
+   AUDIO ENGINE (Web Audio API — no files)
+═══════════════════════════════════════════ */
+const AudioCtx=window.AudioContext||window.webkitAudioContext;
+let actx=null, bgmPlaying=false, bgmGain=null, bgmStarted=false;
+
+function ensureAudio(){
+  if(!actx) actx=new AudioCtx();
+  if(actx.state==='suspended') actx.resume();
+}
+
+// ─── SFX ────────────────────────────────────
+
+function sfxClick(){
+  ensureAudio();
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='sine';o.frequency.setValueAtTime(1800,actx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(900,actx.currentTime+.06);
+  g.gain.setValueAtTime(.12,actx.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+.08);
+  o.connect(g);g.connect(actx.destination);
+  o.start();o.stop(actx.currentTime+.08);
+}
+
+function sfxChipDrop(){
+  ensureAudio();
+  const t=actx.currentTime;
+  // metallic clink
+  [2200,3400,1600].forEach((f,i)=>{
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='sine';o.frequency.setValueAtTime(f,t+i*.03);
+    o.frequency.exponentialRampToValueAtTime(f*.4,t+i*.03+.12);
+    g.gain.setValueAtTime(.08,t+i*.03);
+    g.gain.exponentialRampToValueAtTime(.001,t+i*.03+.15);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t+i*.03);o.stop(t+i*.03+.15);
+  });
+  // noise burst for texture
+  const buf=actx.createBuffer(1,actx.sampleRate*.05,actx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*.3;
+  const ns=actx.createBufferSource(), ng=actx.createGain();
+  ns.buffer=buf;ng.gain.setValueAtTime(.06,t);
+  ng.gain.exponentialRampToValueAtTime(.001,t+.06);
+  ns.connect(ng);ng.connect(actx.destination);
+  ns.start(t);
+}
+
+function sfxCardFlip(){
+  ensureAudio();
+  const t=actx.currentTime;
+  // whoosh
+  const buf=actx.createBuffer(1,actx.sampleRate*.15,actx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){
+    const env=1-i/d.length;
+    d[i]=(Math.random()*2-1)*env*.4;
+  }
+  const ns=actx.createBufferSource(), ng=actx.createGain();
+  const flt=actx.createBiquadFilter();
+  flt.type='bandpass';flt.frequency.setValueAtTime(3000,t);
+  flt.frequency.exponentialRampToValueAtTime(800,t+.12);flt.Q.value=2;
+  ns.buffer=buf;ng.gain.setValueAtTime(.1,t);
+  ng.gain.exponentialRampToValueAtTime(.001,t+.15);
+  ns.connect(flt);flt.connect(ng);ng.connect(actx.destination);
+  ns.start(t);
+  // snap
+  const o=actx.createOscillator(), g2=actx.createGain();
+  o.type='triangle';o.frequency.setValueAtTime(1200,t+.04);
+  o.frequency.exponentialRampToValueAtTime(300,t+.1);
+  g2.gain.setValueAtTime(.07,t+.04);
+  g2.gain.exponentialRampToValueAtTime(.001,t+.1);
+  o.connect(g2);g2.connect(actx.destination);
+  o.start(t+.04);o.stop(t+.12);
+}
+
+function sfxWin(){
+  ensureAudio();
+  const t=actx.currentTime;
+  [523,659,784,1047].forEach((f,i)=>{
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='sine';o.frequency.value=f;
+    g.gain.setValueAtTime(0,t+i*.12);
+    g.gain.linearRampToValueAtTime(.08,t+i*.12+.05);
+    g.gain.exponentialRampToValueAtTime(.001,t+i*.12+.4);
+    o.connect(g);g.connect(actx.destination);
+    o.start(t+i*.12);o.stop(t+i*.12+.4);
+  });
+}
+
+// ─── BACKGROUND MUSIC (chill ambient loop) ──
+
+function startBGM(){
+  if(bgmStarted) return;
+  ensureAudio();
+  bgmStarted=true;
+  bgmGain=actx.createGain();
+  bgmGain.gain.value=0.04;
+  bgmGain.connect(actx.destination);
+
+  // chord pad layers
+  const chords=[
+    [261.6,329.6,392,523.2],  // C maj
+    [220,277.2,329.6,440],    // A min
+    [349.2,440,523.2,698.4],  // F maj
+    [392,493.9,587.3,784],    // G maj
+  ];
+  let chordIdx=0;
+  const oscs=[];
+
+  function playChord(){
+    // fade out old
+    oscs.forEach(o=>{
+      o.g.gain.linearRampToValueAtTime(0,actx.currentTime+1);
+      setTimeout(()=>{try{o.o.stop();}catch(e){}},1500);
+    });
+    oscs.length=0;
+    const notes=chords[chordIdx%chords.length];
+    chordIdx++;
+    notes.forEach(f=>{
+      const o=actx.createOscillator(), g=actx.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(0,actx.currentTime);
+      g.gain.linearRampToValueAtTime(.5,actx.currentTime+2);
+      // subtle vibrato
+      const lfo=actx.createOscillator(), lg=actx.createGain();
+      lfo.type='sine';lfo.frequency.value=.3+Math.random()*.4;
+      lg.gain.value=1.5;
+      lfo.connect(lg);lg.connect(o.frequency);lfo.start();
+      o.connect(g);g.connect(bgmGain);
+      o.start();
+      oscs.push({o,g,lfo});
+    });
+    // add a high shimmer
+    const sh=actx.createOscillator(), sg=actx.createGain();
+    sh.type='sine';sh.frequency.value=notes[3]*2;
+    sg.gain.setValueAtTime(0,actx.currentTime);
+    sg.gain.linearRampToValueAtTime(.12,actx.currentTime+3);
+    sg.gain.linearRampToValueAtTime(0,actx.currentTime+7);
+    sh.connect(sg);sg.connect(bgmGain);
+    sh.start();sh.stop(actx.currentTime+8);
+  }
+
+  playChord();
+  setInterval(playChord,8000);
+  bgmPlaying=true;
+}
+
+function toggleBGM(){
+  if(!bgmStarted){startBGM();return;}
+  if(bgmPlaying){bgmGain.gain.linearRampToValueAtTime(0,actx.currentTime+.5);bgmPlaying=false;}
+  else{bgmGain.gain.linearRampToValueAtTime(0.04,actx.currentTime+.5);bgmPlaying=true;}
+}
+
+// ─── Hook sounds into game events ───────────
+
+// Start BGM on first user interaction
+document.addEventListener('click',()=>{if(!bgmStarted)startBGM();},{once:true});
+
+// Override functions to add sounds
+const _origAddChip=addChip;
+addChip=function(val){_origAddChip(val);sfxChipDrop();};
+
+const _origDoAction=doAction;
+doAction=function(t,a){_origDoAction(t,a);sfxClick();};
+
+// Track state changes for card/win sounds
+let prevStage=null, prevState=null, prevComm=0;
+socket.on('state', s=>{
+  // card flip on new community cards
+  if(s.community&&s.community.length>prevComm){
+    for(let i=0;i<s.community.length-prevComm;i++){
+      setTimeout(()=>sfxCardFlip(),i*250+100);
+    }
+  }
+  prevComm=s.community?s.community.length:0;
+  // card deal sound on new hand
+  if(s.stage==='preflop'&&prevStage!=='preflop'){
+    sfxCardFlip();setTimeout(sfxCardFlip,300);
+  }
+  // win fanfare
+  if(s.state==='showdown'&&prevState!=='showdown'&&s.winner_info){
+    setTimeout(sfxWin,400);
+  }
+  prevStage=s.stage;prevState=s.state;
+});
 </script>
 </body>
 </html>
