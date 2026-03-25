@@ -77,7 +77,7 @@ class PokerGame:
         if any(p['name'] == name for p in self.players):
             return False, 'Name already taken'
         self.players.append({
-            'sid': sid, 'name': name, 'chips': 1000,
+            'sid': sid, 'name': name, 'chips': 5100,
             'hand': [], 'bet': 0, 'folded': False, 'all_in': False,
         })
         return True, 'OK'
@@ -282,7 +282,7 @@ class PokerGame:
         }
         self.dealer_idx = (self.dealer_idx + 1) % len(self.players)
 
-    def rebuy(self, sid, amount=1000):
+    def rebuy(self, sid, amount=5100):
         p = self.get_player(sid)
         if not p:
             return False, 'Player not found'
