@@ -768,7 +768,7 @@ body::after{
       <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
     </div>
     <div id="ad-timer">5</div>
-    <div id="ad-skip">WATCH TO REBUY $5,100</div>
+    <div id="ad-skip">WATCH TO REBUY $5,000</div>
   </div>
 </div>
 
@@ -859,7 +859,9 @@ function startRebuyAd(){
       clearInterval(adTimer);
       overlay.classList.remove('show');
       doRebuy();
-      showToast('⟳ REBUY $5,100 — BACK IN THE GAME');
+      chipInv[5000] = (chipInv[5000]||0) + 1;
+      updateChipDisplay();
+      showToast('⟳ REBUY $5,000 — BACK IN THE GAME');
     }
   },1000);
 }
@@ -896,10 +898,12 @@ function updateChipDisplay(){
   });
 }
 function rebuildChipInv(totalChips){
-  /* convert total chip value back into denominations */
-  let rem = totalChips;
-  const denoms = [5000,1000,500,100,25];
-  const startQty = {5000:0,1000:0,500:0,100:0,25:0};
+  /* convert total chip value back into denominations — $5K only from rebuy */
+  const saved5k = chipInv[5000] || 0;
+  let rem = totalChips - saved5k * 5000;
+  if(rem < 0) rem = 0;
+  const denoms = [1000,500,100,25];
+  const startQty = {5000:saved5k, 1000:0, 500:0, 100:0, 25:0};
   for(const d of denoms){
     startQty[d] = Math.floor(rem/d);
     rem -= startQty[d]*d;

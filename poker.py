@@ -282,7 +282,7 @@ class PokerGame:
         }
         self.dealer_idx = (self.dealer_idx + 1) % len(self.players)
 
-    def rebuy(self, sid, amount=5100):
+    def rebuy(self, sid, amount=5000):
         p = self.get_player(sid)
         if not p:
             return False, 'Player not found'
