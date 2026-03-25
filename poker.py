@@ -275,10 +275,13 @@ class PokerGame:
         split = self.pot // len(winners)
         for i, w in enumerate(winners):
             w['chips'] += split + (self.pot % len(winners) if i == 0 else 0)
+        hand_name = self.hand_names.get(winners[0]['name'], '')
+        # If no showdown (everyone else folded), note the reason
+        reason = hand_name if hand_name else 'All Others Folded'
         self.winner_info = {
             'names': [w['name'] for w in winners],
             'pot': self.pot,
-            'hand': self.hand_names.get(winners[0]['name'], ''),
+            'hand': reason,
         }
         self.dealer_idx = (self.dealer_idx + 1) % len(self.players)
 
