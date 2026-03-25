@@ -548,6 +548,24 @@ body::after{
 .pp-cards{display:flex;gap:4px;margin-top:5px;}
 .pp-hand-name{font-size:8px;color:var(--gold);letter-spacing:1px;margin-top:2px;text-shadow:0 0 6px var(--gold);}
 #status-msg{font-size:10px;letter-spacing:3px;color:rgba(0,255,204,0.45);text-align:center;min-height:14px;}
+#turn-timer{
+  width:100%;max-width:320px;height:4px;margin:2px auto 0;
+  background:rgba(0,255,204,0.1);position:relative;overflow:hidden;
+}
+#turn-timer-bar{
+  height:100%;width:100%;
+  background:var(--c);
+  box-shadow:0 0 8px var(--c),0 0 16px rgba(0,255,204,0.3);
+  transition:width 1s linear;
+}
+#turn-timer-bar.urgent{
+  background:var(--red);
+  box-shadow:0 0 8px var(--red),0 0 16px rgba(255,51,68,0.3);
+}
+#turn-timer-text{
+  font-size:9px;letter-spacing:2px;text-align:center;
+  margin-top:2px;min-height:12px;
+}
 
 /* WAITING ROOM */
 #waiting{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;height:100%;}
@@ -895,6 +913,8 @@ body::after{
       <div id="actions">
         <div id="action-btns"></div>
         <div id="status-msg"></div>
+        <div id="turn-timer" style="display:none"><div id="turn-timer-bar"></div></div>
+        <div id="turn-timer-text"></div>
       </div>
     </div><!-- end game-view -->
 
@@ -1383,12 +1403,59 @@ function seatCards(p,state){
 }
 
 /* ─── ACTION PANEL ───────────────────────── */
+let turnTimerInterval=null;
+let turnSecondsLeft=0;
+
+function startTurnCountdown(seconds){
+  clearInterval(turnTimerInterval);
+  turnSecondsLeft=seconds;
+  const timerEl=document.getElementById('turn-timer');
+  const barEl=document.getElementById('turn-timer-bar');
+  const textEl=document.getElementById('turn-timer-text');
+  timerEl.style.display='block';
+  barEl.style.transition='none';
+  barEl.style.width=(seconds/20*100)+'%';
+  // force reflow then animate
+  void barEl.offsetWidth;
+  barEl.style.transition='width 1s linear';
+  updateTimerDisplay();
+  turnTimerInterval=setInterval(()=>{
+    turnSecondsLeft--;
+    if(turnSecondsLeft<=0){turnSecondsLeft=0;clearInterval(turnTimerInterval);}
+    updateTimerDisplay();
+  },1000);
+}
+
+function updateTimerDisplay(){
+  const barEl=document.getElementById('turn-timer-bar');
+  const textEl=document.getElementById('turn-timer-text');
+  const pct=Math.max(0,turnSecondsLeft/20*100);
+  barEl.style.width=pct+'%';
+  barEl.classList.toggle('urgent',turnSecondsLeft<=5);
+  textEl.textContent=turnSecondsLeft>0?`⏱ ${turnSecondsLeft}s`:'';
+  textEl.style.color=turnSecondsLeft<=5?'var(--red)':'rgba(0,255,204,0.4)';
+}
+
+function stopTurnCountdown(){
+  clearInterval(turnTimerInterval);
+  document.getElementById('turn-timer').style.display='none';
+  document.getElementById('turn-timer-text').textContent='';
+}
+
 function renderActions(s){
   const btns=document.getElementById('action-btns');
   const cp=document.getElementById('chip-panel');
   const msg=document.getElementById('status-msg');
   const dz=document.getElementById('drop-zone');
-  if(s.state!=='playing'){btns.innerHTML='';cp.style.display='none';dz.classList.remove('visible');msg.textContent='';return;}
+  if(s.state!=='playing'){btns.innerHTML='';cp.style.display='none';dz.classList.remove('visible');msg.textContent='';stopTurnCountdown();return;}
+
+  /* Turn timer */
+  if(s.turn_timer!=null && s.turn_timer>0){
+    startTurnCountdown(s.turn_timer);
+  } else {
+    stopTurnCountdown();
+  }
+
   if(s.your_turn){
     let html=`<button class="btn danger" onclick="doFold()">✗ FOLD</button>`;
     html+=s.can_check?`<button class="btn" onclick="doCheck()">◻ CHECK</button>`:

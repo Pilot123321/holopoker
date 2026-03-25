@@ -1,4 +1,6 @@
 import os
+import time
+import threading
 from flask import Flask, send_from_directory, request
 from flask_socketio import SocketIO, emit, join_room
 from poker import PokerGame
@@ -9,14 +11,55 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 
 rooms = {}      # room_id -> PokerGame
 sid_info = {}   # sid -> (room_id, player_name)
+turn_timers = {}  # room_id -> threading.Timer
+TURN_TIMEOUT = 20  # seconds
+
+
+def cancel_turn_timer(room_id):
+    t = turn_timers.pop(room_id, None)
+    if t:
+        t.cancel()
+
+
+def start_turn_timer(room_id):
+    cancel_turn_timer(room_id)
+    game = rooms.get(room_id)
+    if not game or game.state != 'playing':
+        return
+    # record when the turn started
+    game.turn_deadline = time.time() + TURN_TIMEOUT
+    t = threading.Timer(TURN_TIMEOUT, auto_fold, args=[room_id])
+    t.daemon = True
+    t.start()
+    turn_timers[room_id] = t
+
+
+def auto_fold(room_id):
+    turn_timers.pop(room_id, None)
+    game = rooms.get(room_id)
+    if not game or game.state != 'playing':
+        return
+    cp = game.players[game.current_player_idx]
+    game.action(cp['sid'], 'fold')
+    game.last_action = f'{cp["name"]} FOLDS (TIMEOUT)'
+    broadcast(room_id)
 
 
 def broadcast(room_id):
     game = rooms.get(room_id)
     if not game:
         return
+    # calculate remaining time for current turn
+    turn_remaining = 0
+    if game.state == 'playing' and hasattr(game, 'turn_deadline'):
+        turn_remaining = max(0, round(game.turn_deadline - time.time()))
     for p in game.players:
-        socketio.emit('state', game.to_dict(viewer_sid=p['sid']), to=p['sid'])
+        state = game.to_dict(viewer_sid=p['sid'])
+        state['turn_timer'] = turn_remaining
+        socketio.emit('state', state, to=p['sid'])
+    # start timer for new current player
+    if game.state == 'playing':
+        start_turn_timer(room_id)
 
 
 @app.route('/')
@@ -147,9 +190,26 @@ def on_disconnect():
         return
     room_id, name = info
     game = rooms.get(room_id)
-    if game and game.state == 'waiting':
+    if not game:
+        return
+    if game.state == 'waiting':
         game.remove_player(request.sid)
         broadcast(room_id)
+    elif game.state == 'playing':
+        # auto-fold disconnected player
+        p = game.get_player(request.sid)
+        if p and not p['folded']:
+            if game.can_act(request.sid):
+                game.action(request.sid, 'fold')
+                game.last_action = f'{name} FOLDS (DISCONNECTED)'
+            else:
+                p['folded'] = True
+                game.action_required.discard(
+                    next(i for i, pl in enumerate(game.players) if pl['sid'] == request.sid)
+                )
+                game._advance()
+                game.last_action = f'{name} FOLDS (DISCONNECTED)'
+            broadcast(room_id)
 
 
 if __name__ == '__main__':
