@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: holopoker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --bind 0.0.0.0:$PORT app:app
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
