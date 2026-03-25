@@ -648,6 +648,179 @@ body::after{
   60%{transform:rotateX(-18deg) rotateY(-8deg) translateY(-6px) scale(1.03);opacity:1;}
   100%{transform:rotateX(-18deg) rotateY(-8deg) translateY(0) scale(1);opacity:1;}
 }
+
+/* ═══════════════════════════════════════════
+   MOBILE RESPONSIVE
+═══════════════════════════════════════════ */
+@media(max-width:768px){
+  body{overflow-y:auto;height:auto;min-height:100vh;-webkit-overflow-scrolling:touch;}
+
+  /* LOBBY */
+  #lobby{height:auto;min-height:100vh;padding:24px 10px 40px;gap:18px;}
+  .logo{font-size:24px;letter-spacing:4px;}
+  .logo-sub{font-size:9px;letter-spacing:3px;margin-top:-12px;}
+  .lobby-box{
+    min-width:0;width:100%;padding:20px 18px;
+    transform:none;
+  }
+  .lobby-box input{font-size:16px;letter-spacing:2px;}
+  #room-list-box{
+    min-width:0;width:100%;padding:16px 14px;
+    transform:none;
+  }
+
+  /* HEADER */
+  #hdr{padding:8px 12px;flex-wrap:wrap;gap:6px;}
+  #hdr .title{font-size:12px;letter-spacing:3px;}
+  #hdr .room-code{font-size:14px;letter-spacing:4px;}
+  #hdr .you-badge{font-size:9px;}
+
+  /* GAME */
+  #game{height:auto;min-height:100vh;}
+  #main{padding-bottom:10px;}
+
+  /* TABLE */
+  #table-wrap{perspective:800px;width:100%;display:flex;justify-content:center;}
+  #table{
+    width:92vw;max-width:420px;height:180px;
+    border-radius:90px;
+    transform:rotateX(18deg) scale(0.95);
+  }
+  #table::before{inset:8px;border-radius:80px;}
+  #table::after{inset:14px;border-radius:70px;}
+  #pot{font-size:13px;letter-spacing:2px;}
+  #stage-label{font-size:8px;letter-spacing:3px;}
+  #community{gap:5px;margin:2px 0;}
+  #last-act{font-size:8px;max-width:90vw;}
+  #drop-zone{padding:6px 16px;font-size:8px;}
+
+  /* COMMUNITY CARDS — smaller on mobile */
+  .cb.sz-md{width:36px;height:50px;}
+  .cb.sz-md .cb-top{height:6px;}
+  .cb.sz-md .cb-right{width:6px;}
+  .cb.sz-md .rank{font-size:8px;}
+  .cb.sz-md .suit-big{font-size:14px;}
+
+  /* YOUR CARDS */
+  #your-area{padding:4px 0 2px;}
+  .cb.sz-lg{width:54px;height:76px;}
+  .cb.sz-lg .cb-top{height:9px;}
+  .cb.sz-lg .cb-right{width:9px;}
+  .cb.sz-lg .rank{font-size:11px;}
+  .cb.sz-lg .suit-big{font-size:24px;}
+  #your-cards{gap:10px;}
+  #your-label{font-size:8px;letter-spacing:3px;}
+  #you-info{gap:10px;}
+  #you-name{font-size:10px;}
+  #you-chips{font-size:11px;}
+  #you-bet{font-size:9px;}
+
+  /* ACTION PANEL */
+  #actions{padding:6px 10px 10px;gap:6px;}
+  #action-btns{gap:6px;}
+  #action-btns .btn{font-size:11px;padding:8px 14px;letter-spacing:2px;}
+  #status-msg{font-size:9px;letter-spacing:2px;}
+
+  /* CHIP PANEL — bottom horizontal strip on mobile */
+  #chip-panel{
+    position:fixed !important;
+    left:0 !important;right:0 !important;
+    bottom:0 !important;top:auto !important;
+    transform:none !important;
+    flex-direction:column !important;
+    padding:8px 10px 12px !important;
+    gap:6px !important;
+    border-radius:12px 12px 0 0;
+    border-left:none;border-right:none;border-bottom:none;
+    max-height:45vh;
+    overflow-y:auto;
+  }
+  #chip-label{font-size:8px;letter-spacing:3px;margin-bottom:0;}
+  #chip-tray{
+    flex-direction:row !important;
+    flex-wrap:wrap;
+    gap:6px !important;
+    justify-content:center;
+  }
+  .chip-row{flex-direction:column;gap:2px !important;align-items:center;}
+  .chip{width:40px;height:40px;}
+  .chip::after{bottom:-7px;height:9px;}
+  .chip-inner{font-size:8px;}
+  .chip-qty{font-size:9px;text-align:center !important;min-width:0 !important;}
+  #chip-display{font-size:11px;padding:4px 10px;min-width:80px;}
+  #chip-btn-row{
+    flex-direction:row !important;
+    gap:6px !important;
+    justify-content:center;
+  }
+  #chip-btn-row .btn{width:auto !important;font-size:10px;padding:6px 12px;}
+
+  /* PLAYER PANEL — top horizontal strip on mobile */
+  #player-panel{
+    position:fixed !important;
+    right:0 !important;left:0 !important;
+    top:auto !important;bottom:auto !important;
+    top:44px !important;
+    transform:none !important;
+    flex-direction:row !important;
+    overflow-x:auto;
+    overflow-y:hidden;
+    padding:6px 8px !important;
+    gap:6px !important;
+    min-width:0 !important;
+    border-left:none;border-right:none;
+    border-radius:0;
+    -webkit-overflow-scrolling:touch;
+  }
+  #player-panel .pp-label{display:none;}
+  #player-panel .pp-card{padding:5px 8px;min-width:90px;flex-shrink:0;}
+  .pp-name{font-size:9px;letter-spacing:1px;}
+  .pp-chips{font-size:11px;}
+  .pp-bet{font-size:9px;}
+  .pp-status{font-size:8px;}
+  .pp-cards{gap:2px;margin-top:3px;}
+  .pp-hand-name{font-size:7px;}
+
+  /* SEAT CARDS on player panel */
+  .cb.sz-sm{width:24px;height:34px;}
+  .cb.sz-sm .cb-top{height:4px;}
+  .cb.sz-sm .cb-right{width:4px;}
+  .cb.sz-sm .rank{font-size:6px;}
+  .cb.sz-sm .suit-big{font-size:10px;}
+
+  /* WAITING ROOM */
+  #waiting{gap:14px;}
+  #player-list{min-width:0;width:90vw;padding:16px 18px;transform:none;}
+
+  /* WINNER OVERLAY */
+  #winner-text{font-size:22px;letter-spacing:4px;}
+  #winner-detail{font-size:12px;letter-spacing:2px;}
+
+  /* TOAST */
+  #toast{top:50px;font-size:10px;padding:6px 14px;max-width:90vw;text-align:center;}
+
+  /* AD OVERLAY */
+  #ad-box{padding:20px 16px;}
+  #ad-timer{font-size:30px;}
+}
+
+/* Extra small screens */
+@media(max-width:400px){
+  .logo{font-size:20px;letter-spacing:3px;}
+  #table{height:150px;border-radius:75px;}
+  #table::before{border-radius:65px;}
+  #table::after{border-radius:55px;}
+  .cb.sz-md{width:30px;height:42px;}
+  .cb.sz-md .rank{font-size:7px;}
+  .cb.sz-md .suit-big{font-size:12px;}
+  .cb.sz-lg{width:46px;height:64px;}
+  .cb.sz-lg .rank{font-size:10px;}
+  .cb.sz-lg .suit-big{font-size:20px;}
+  .chip{width:34px;height:34px;}
+  .chip::after{bottom:-6px;height:7px;}
+  .chip-inner{font-size:7px;}
+  #pot{font-size:11px;}
+}
 </style>
 </head>
 <body>
