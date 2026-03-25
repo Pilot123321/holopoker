@@ -1422,6 +1422,7 @@ function startTurnCountdown(seconds){
   turnTimerInterval=setInterval(()=>{
     turnSecondsLeft--;
     if(turnSecondsLeft<=0){turnSecondsLeft=0;clearInterval(turnTimerInterval);}
+    if(turnSecondsLeft>0 && turnSecondsLeft<=5) sfxTick();
     updateTimerDisplay();
   },1000);
 }
@@ -1610,6 +1611,18 @@ function sfxCardFlip(){
   g2.gain.exponentialRampToValueAtTime(.001,t+.1);
   o.connect(g2);g2.connect(actx.destination);
   o.start(t+.04);o.stop(t+.12);
+}
+
+function sfxTick(){
+  ensureAudio();
+  const t=actx.currentTime;
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='square';o.frequency.setValueAtTime(1000,t);
+  o.frequency.exponentialRampToValueAtTime(600,t+.04);
+  g.gain.setValueAtTime(.1,t);
+  g.gain.exponentialRampToValueAtTime(.001,t+.06);
+  o.connect(g);g.connect(actx.destination);
+  o.start(t);o.stop(t+.06);
 }
 
 function sfxWin(){
