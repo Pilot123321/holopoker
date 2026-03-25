@@ -1164,22 +1164,18 @@ function calcChipDistribution(total){
   let rem = total - inv[5000] * 5000;
   if(rem < 0) rem = 0;
 
-  /* $1K: give 2, or fewer if not enough */
-  inv[1000] = Math.min(2, Math.floor(rem / 1000));
-  rem -= inv[1000] * 1000;
+  /* Reserve $100 for $25 chips if affordable */
+  const reserve = Math.min(100, rem);
+  rem -= reserve;
 
-  /* $500: give 4, or fewer if not enough */
-  inv[500] = Math.min(4, Math.floor(rem / 500));
-  rem -= inv[500] * 500;
-
-  /* $100: fill but keep up to $100 for $25 chips */
-  if(rem >= 125){
-    const forHundreds = rem - 100;
-    inv[100] = Math.floor(forHundreds / 100);
-    rem -= inv[100] * 100;
+  /* Greedy high-to-low */
+  for(const d of [1000, 500, 100]){
+    inv[d] = Math.floor(rem / d);
+    rem -= inv[d] * d;
   }
 
-  /* $25: everything left */
+  /* Add reserve back and fill $25 */
+  rem += reserve;
   inv[25] = Math.floor(rem / 25);
 
   return inv;
