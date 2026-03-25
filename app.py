@@ -21,14 +21,13 @@ def start_turn_timer(room_id):
     game = rooms.get(room_id)
     if not game or game.state != 'playing':
         return
-    # Increment generation to invalidate any previous timer
     gen = turn_generation.get(room_id, 0) + 1
     turn_generation[room_id] = gen
     game.turn_deadline = time.time() + TURN_TIMEOUT
+    game.turn_gen = gen  # track which generation this deadline belongs to
 
     def _auto_fold():
-        socketio.sleep(TURN_TIMEOUT)
-        # Only fold if this timer is still the active one
+        socketio.sleep(TURN_TIMEOUT + 0.5)  # small buffer
         if turn_generation.get(room_id) != gen:
             return
         g = rooms.get(room_id)
@@ -36,37 +35,33 @@ def start_turn_timer(room_id):
             return
         cp = g.players[g.current_player_idx]
         g.action(cp['sid'], 'fold')
-        g.last_action = f'{cp["name"]} FOLDS (TIMEOUT)'
+        g.last_action = f'{cp["name"]} AUTO-FOLDED'
         broadcast_and_timer(room_id)
 
     socketio.start_background_task(_auto_fold)
 
 
 def cancel_turn_timer(room_id):
-    """Invalidate any running timer by bumping generation."""
     turn_generation[room_id] = turn_generation.get(room_id, 0) + 1
 
 
 def broadcast(room_id):
-    """Send state to all players — does NOT restart timer."""
     game = rooms.get(room_id)
     if not game:
         return
-    turn_remaining = 0
-    if game.state == 'playing' and hasattr(game, 'turn_deadline'):
-        turn_remaining = max(0, round(game.turn_deadline - time.time()))
     for p in game.players:
         state = game.to_dict(viewer_sid=p['sid'])
-        state['turn_timer'] = turn_remaining
+        if game.state == 'playing' and hasattr(game, 'turn_deadline'):
+            state['turn_deadline'] = game.turn_deadline
+            state['turn_gen'] = getattr(game, 'turn_gen', 0)
         socketio.emit('state', state, to=p['sid'])
 
 
 def broadcast_and_timer(room_id):
-    """Broadcast state AND start a new turn timer."""
-    broadcast(room_id)
     game = rooms.get(room_id)
     if game and game.state == 'playing':
         start_turn_timer(room_id)
+    broadcast(room_id)
 
 
 @app.route('/')
@@ -93,6 +88,11 @@ def on_get_rooms():
             'state': game.state,
         })
     emit('rooms', room_list)
+
+
+@socketio.on('sync_time')
+def on_sync_time():
+    emit('server_time', {'t': time.time()})
 
 
 @socketio.on('join')

@@ -1015,6 +1015,10 @@ socket.on('connect', () => {
   connEl.textContent = '● CONNECTED';
   connEl.style.color = 'var(--c)';
   refreshRooms();
+  socket.emit('sync_time');
+});
+socket.on('server_time', d => {
+  window._serverTimeOffset = (Date.now()/1000) - d.t;
 });
 socket.on('disconnect', () => {
   connEl.textContent = '● DISCONNECTED';
@@ -1426,41 +1430,38 @@ function seatCards(p,state){
 
 /* ─── ACTION PANEL ───────────────────────── */
 let turnTimerInterval=null;
-let turnSecondsLeft=0;
+let turnDeadline=0;
+let currentTurnGen=-1;
+const TURN_MAX=25;
 
-function startTurnCountdown(seconds){
+function syncTurnTimer(deadline, gen){
+  if(gen===currentTurnGen) return; // same turn, don't reset
+  currentTurnGen=gen;
+  turnDeadline=deadline;
   clearInterval(turnTimerInterval);
-  turnSecondsLeft=seconds;
-  const timerEl=document.getElementById('turn-timer');
-  const barEl=document.getElementById('turn-timer-bar');
-  const textEl=document.getElementById('turn-timer-text');
-  timerEl.style.display='block';
-  barEl.style.transition='none';
-  barEl.style.width=(seconds/25*100)+'%';
-  // force reflow then animate
-  void barEl.offsetWidth;
-  barEl.style.transition='width 1s linear';
-  updateTimerDisplay();
-  turnTimerInterval=setInterval(()=>{
-    turnSecondsLeft--;
-    if(turnSecondsLeft<=0){turnSecondsLeft=0;clearInterval(turnTimerInterval);}
-    if(turnSecondsLeft>0 && turnSecondsLeft<=5) sfxTick();
-    updateTimerDisplay();
-  },1000);
+  document.getElementById('turn-timer').style.display='block';
+  tickTimer();
+  turnTimerInterval=setInterval(tickTimer,500);
 }
 
-function updateTimerDisplay(){
+function tickTimer(){
+  const now=Date.now()/1000;
+  const left=Math.max(0,Math.ceil(turnDeadline-now));
   const barEl=document.getElementById('turn-timer-bar');
   const textEl=document.getElementById('turn-timer-text');
-  const pct=Math.max(0,turnSecondsLeft/25*100);
+  const pct=Math.max(0,left/TURN_MAX*100);
+  barEl.style.transition='width 0.5s linear';
   barEl.style.width=pct+'%';
-  barEl.classList.toggle('urgent',turnSecondsLeft<=5);
-  textEl.textContent=turnSecondsLeft>0?`⏱ ${turnSecondsLeft}s`:'';
-  textEl.style.color=turnSecondsLeft<=5?'var(--red)':'rgba(0,255,204,0.4)';
+  barEl.classList.toggle('urgent',left<=5);
+  textEl.textContent=left>0?`⏱ ${left}s`:'';
+  textEl.style.color=left<=5?'var(--red)':'rgba(0,255,204,0.4)';
+  if(left>0 && left<=5 && Math.ceil(turnDeadline-now+0.5)>left) sfxTick();
+  if(left<=0) clearInterval(turnTimerInterval);
 }
 
 function stopTurnCountdown(){
   clearInterval(turnTimerInterval);
+  currentTurnGen=-1;
   document.getElementById('turn-timer').style.display='none';
   document.getElementById('turn-timer-text').textContent='';
 }
@@ -1472,9 +1473,11 @@ function renderActions(s){
   const dz=document.getElementById('drop-zone');
   if(s.state!=='playing'){btns.innerHTML='';cp.style.display='none';dz.classList.remove('visible');msg.textContent='';stopTurnCountdown();return;}
 
-  /* Turn timer */
-  if(s.turn_timer!=null && s.turn_timer>0){
-    startTurnCountdown(s.turn_timer);
+  /* Turn timer — sync from server deadline */
+  if(s.turn_deadline && s.turn_gen!=null){
+    /* Compute server time offset on first state */
+    if(!window._serverTimeOffset) window._serverTimeOffset=0;
+    syncTurnTimer(s.turn_deadline+window._serverTimeOffset, s.turn_gen);
   } else {
     stopTurnCountdown();
   }
