@@ -126,12 +126,21 @@ body::after{
 
 /* ROOM LIST */
 #room-list-box{
-  border:1px solid rgba(0,255,204,0.3);padding:22px 28px;min-width:260px;
+  border:1px solid rgba(0,255,204,0.3);padding:22px 28px;min-width:320px;
   background:rgba(0,8,5,0.7);
   box-shadow:3px 3px 0 rgba(0,255,204,0.2),6px 6px 0 rgba(0,255,204,0.1);
   transform:perspective(400px) rotateX(-4deg);
   backdrop-filter:blur(4px);
 }
+#room-list-inner{
+  max-height:455px; /* ~13 rooms × 35px */
+  overflow-y:auto;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(0,255,204,0.3) transparent;
+}
+#room-list-inner::-webkit-scrollbar{width:4px;}
+#room-list-inner::-webkit-scrollbar-track{background:transparent;}
+#room-list-inner::-webkit-scrollbar-thumb{background:rgba(0,255,204,0.3);border-radius:2px;}
 #room-list-box h3{font-size:10px;letter-spacing:3px;margin-bottom:14px;color:rgba(0,255,204,0.45);}
 .room-row{
   display:flex;align-items:center;justify-content:space-between;gap:14px;
