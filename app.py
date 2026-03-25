@@ -192,6 +192,20 @@ def on_disconnect():
     game = rooms.get(room_id)
     if not game:
         return
+
+    # Check if disconnected player is the host (first player)
+    is_host = len(game.players) > 0 and game.players[0]['sid'] == request.sid
+
+    if is_host:
+        # Host left — kick everyone and destroy room
+        cancel_turn_timer(room_id)
+        for p in game.players:
+            if p['sid'] != request.sid:
+                socketio.emit('host_disconnected', {}, to=p['sid'])
+                sid_info.pop(p['sid'], None)
+        rooms.pop(room_id, None)
+        return
+
     if game.state == 'waiting':
         game.remove_player(request.sid)
         broadcast(room_id)

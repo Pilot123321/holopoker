@@ -1017,6 +1017,12 @@ socket.on('joined', d => {
 });
 socket.on('state', s => { gameState=s; render(s); });
 socket.on('err', d => showToast(d.msg));
+socket.on('host_disconnected', () => {
+  showToast('HOST DISCONNECTED — ROOM CLOSED');
+  document.getElementById('game').style.display='none';
+  document.getElementById('lobby').style.display='flex';
+  stopTurnCountdown();
+});
 
 /* ─── Actions ────────────────────────────── */
 function doJoin(){
