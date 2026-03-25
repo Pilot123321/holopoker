@@ -921,15 +921,22 @@ function doAllin(){doAction('allin');}
 
 /* ─── Chip Drag & Drop ──────────────────── */
 let dragChip=null, dragVal=0, dragSource=null;
+let dragStartX=0, dragStartY=0, isDragging=false;
 const dropZone=document.getElementById('drop-zone');
+const DRAG_THRESHOLD=8;
 
 function startDrag(e, srcEl){
   e.preventDefault();
   dragVal=parseInt(srcEl.dataset.val);
-  if(chipInv[dragVal] - pendingChips[dragVal] <= 0) return; // no chips left
+  if(chipInv[dragVal] - pendingChips[dragVal] <= 0) return;
   dragSource=srcEl;
+  isDragging=false;
+  dragStartX=e.clientX||(e.touches&&e.touches[0].clientX)||0;
+  dragStartY=e.clientY||(e.touches&&e.touches[0].clientY)||0;
+}
+
+function initDragGhost(srcEl, e){
   srcEl.classList.add('dim');
-  // create ghost
   dragChip=srcEl.cloneNode(true);
   dragChip.classList.remove('chip-source','dim');
   dragChip.classList.add('dragging');
@@ -937,23 +944,36 @@ function startDrag(e, srcEl){
   dragChip.style.height=srcEl.offsetHeight+'px';
   document.body.appendChild(dragChip);
   dropZone.classList.add('visible');
+  isDragging=true;
   moveDrag(e);
 }
 
 function moveDrag(e){
-  if(!dragChip) return;
+  if(!dragSource) return;
   const x=(e.clientX||e.touches[0].clientX);
   const y=(e.clientY||e.touches[0].clientY);
+  if(!isDragging){
+    if(Math.abs(x-dragStartX)+Math.abs(y-dragStartY)>DRAG_THRESHOLD){
+      initDragGhost(dragSource, e);
+    }
+    return;
+  }
   dragChip.style.left=(x-26)+'px';
   dragChip.style.top=(y-26)+'px';
-  // check hover on drop zone
   const dz=dropZone.getBoundingClientRect();
   const over=x>=dz.left&&x<=dz.right&&y>=dz.top&&y<=dz.bottom;
   dropZone.classList.toggle('hover',over);
 }
 
 function endDrag(e){
-  if(!dragChip) return;
+  if(!dragSource) return;
+  if(!isDragging){
+    /* simple click — add chip directly */
+    addChip(dragVal);
+    if(typeof playChipDrop==='function') playChipDrop();
+    dragSource=null;
+    return;
+  }
   const x=e.clientX||(e.changedTouches&&e.changedTouches[0].clientX)||0;
   const y=e.clientY||(e.changedTouches&&e.changedTouches[0].clientY)||0;
   const dz=dropZone.getBoundingClientRect();
@@ -970,8 +990,6 @@ function endDrag(e){
 
 // Bind events on chip sources
 document.querySelectorAll('.chip-source').forEach(el=>{
-  // Click still works as fallback
-  el.addEventListener('click',()=>addChip(parseInt(el.dataset.val)));
   // Mouse drag
   el.addEventListener('mousedown',e=>startDrag(e,el));
   // Touch drag
