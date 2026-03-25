@@ -65,7 +65,7 @@ class PokerGame:
         self.dealer_idx = 0
         self.current_player_idx = 0
         self.stage = None
-        self.SB, self.BB = 10, 20
+        self.SB, self.BB = 25, 50
         self.winner_info = None
         self.last_action = None
         self.action_required = set()

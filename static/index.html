@@ -1058,8 +1058,7 @@ function startRebuyAd(){
       clearInterval(adTimer);
       overlay.classList.remove('show');
       doRebuy();
-      chipInv[5000] = (chipInv[5000]||0) + 1;
-      lastKnownChips = 5000;
+      has5kFromRebuy++;
       updateChipDisplay();
       showToast('⟳ REBUY $5,000 — BACK IN THE GAME');
     }
@@ -1072,14 +1071,48 @@ function doCall(){doAction('call');}
 let pendingBet = 0;
 let chipMinRaise = 40;
 /* chip inventory — tracks qty of each denomination */
-const INITIAL_CHIPS = {25:4, 100:10, 500:4, 1000:2, 5000:0};
-const INITIAL_TOTAL = 5100; // 2×1000 + 4×500 + 10×100 + 4×25
-let chipInv = {...INITIAL_CHIPS};
+let chipInv = {25:4, 100:10, 500:4, 1000:2, 5000:0};
 let pendingChips = {25:0, 100:0, 500:0, 1000:0, 5000:0};
-let lastKnownChips = INITIAL_TOTAL;
+let has5kFromRebuy = 0; // track $5K chips separately (rebuy only)
+
+function calcChipDistribution(total){
+  /*
+   * Fixed distribution matching initial buy-in ratio:
+   *   2×$1K, 4×$500, 10×$100, 4×$25 = $5100
+   *
+   * Rule: give 2×$1K, 4×$500, then fill $100, then $25 for remainder.
+   * If total is too small for 2×$1K, scale down.
+   */
+  const inv = {5000:0, 1000:0, 500:0, 100:0, 25:0};
+
+  /* Preserve $5K chips from rebuy */
+  inv[5000] = has5kFromRebuy;
+  let rem = total - inv[5000] * 5000;
+  if(rem < 0) rem = 0;
+
+  /* $1K: give 2, or fewer if not enough */
+  inv[1000] = Math.min(2, Math.floor(rem / 1000));
+  rem -= inv[1000] * 1000;
+
+  /* $500: give 4, or fewer if not enough */
+  inv[500] = Math.min(4, Math.floor(rem / 500));
+  rem -= inv[500] * 500;
+
+  /* $100: fill but keep up to $100 for $25 chips */
+  if(rem >= 125){
+    const forHundreds = rem - 100;
+    inv[100] = Math.floor(forHundreds / 100);
+    rem -= inv[100] * 100;
+  }
+
+  /* $25: everything left */
+  inv[25] = Math.floor(rem / 25);
+
+  return inv;
+}
 
 function addChip(val){
-  if(chipInv[val] - pendingChips[val] <= 0) return; // none left
+  if(chipInv[val] - pendingChips[val] <= 0) return;
   pendingChips[val]++;
   pendingBet += val;
   updateChipDisplay();
@@ -1100,74 +1133,17 @@ function updateChipDisplay(){
     if(row) row.classList.toggle('empty', avail<=0);
   });
 }
-function chipInvTotal(){
-  let t=0; for(const d in chipInv) t+=parseInt(d)*chipInv[d]; return t;
-}
 function rebuildChipInv(totalChips){
-  /* Clear pending */
   for(const k in pendingChips) pendingChips[k]=0;
   pendingBet = 0;
-
-  /* First join — use exact starting distribution */
-  const invTotal = chipInvTotal();
-  if(invTotal === 0 && totalChips === INITIAL_TOTAL){
-    chipInv = {...INITIAL_CHIPS};
-    lastKnownChips = totalChips;
-    updateChipDisplay();
-    return;
-  }
-
-  const delta = totalChips - invTotal;
-  if(delta === 0){ updateChipDisplay(); return; }
-
-  if(delta < 0){
-    /* Lost chips (blind/bet) — remove from smallest denominations first */
-    let rem = Math.abs(delta);
-    const smallFirst = [25,100,500,1000,5000];
-    for(const d of smallFirst){
-      while(rem >= d && chipInv[d] > 0){
-        chipInv[d]--;
-        rem -= d;
-      }
-    }
-    /* If remainder (can't make exact change), break a larger chip */
-    if(rem > 0){
-      for(const d of [25,100,500,1000,5000]){
-        if(chipInv[d] > 0 && d > rem){
-          chipInv[d]--;
-          let change = d - rem;
-          rem = 0;
-          /* Give back change in smaller chips */
-          const changeDenoms = [1000,500,100,25];
-          for(const cd of changeDenoms){
-            const qty = Math.floor(change/cd);
-            chipInv[cd] += qty;
-            change -= qty*cd;
-          }
-          break;
-        }
-      }
-    }
-  } else {
-    /* Won chips — add as largest denominations first (excluding $5K) */
-    let rem = delta;
-    const bigFirst = [1000,500,100,25];
-    for(const d of bigFirst){
-      const qty = Math.floor(rem/d);
-      chipInv[d] += qty;
-      rem -= qty*d;
-    }
-  }
-
-  lastKnownChips = totalChips;
+  chipInv = calcChipDistribution(totalChips);
   updateChipDisplay();
 }
 function doRaise(){
   const amt = Math.max(pendingBet, chipMinRaise);
   doAction('raise', amt);
-  /* commit pending chips to inventory */
-  for(const k in pendingChips){ chipInv[k] -= pendingChips[k]; pendingChips[k]=0; }
   pendingBet = 0;
+  for(const k in pendingChips) pendingChips[k]=0;
   updateChipDisplay();
 }
 function doAllin(){doAction('allin');}
