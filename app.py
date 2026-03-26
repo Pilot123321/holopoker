@@ -115,6 +115,13 @@ def on_join(data):
         return
 
     if game.state != 'waiting':
+        # Try to re-add a player who was removed (busted + disconnected)
+        if game.rejoin_player(request.sid, name):
+            sid_info[request.sid] = (room_id, name)
+            join_room(room_id)
+            emit('joined', {'room': room_id, 'name': name, 'host': False})
+            broadcast(room_id)
+            return
         emit('err', {'msg': 'Game already in progress — reconnect with same name'})
         return
 

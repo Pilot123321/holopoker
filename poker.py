@@ -92,6 +92,18 @@ class PokerGame:
                 return True
         return False
 
+    def rejoin_player(self, sid, name):
+        """Re-add a player who was removed mid-game (e.g. busted + disconnected)."""
+        if any(p['name'] == name for p in self.players):
+            return False  # already in game
+        if len(self.players) >= 7:
+            return False
+        self.players.append({
+            'sid': sid, 'name': name, 'chips': 0,
+            'hand': [], 'bet': 0, 'folded': True, 'all_in': False,
+        })
+        return True
+
     def get_player(self, sid):
         return next((p for p in self.players if p['sid'] == sid), None)
 
