@@ -922,9 +922,10 @@ body::after{
   /* TOAST */
   #toast{top:50px;font-size:10px;padding:6px 14px;max-width:90vw;text-align:center;}
 
-  /* AD OVERLAY */
-  #ad-box{padding:20px 16px;}
-  #ad-timer{font-size:30px;}
+  /* SPIN WHEEL */
+  #rebuy-box{padding:20px 16px;}
+  #wheel-wrap{width:220px;height:220px;}
+  #wheel-canvas{width:220px;height:220px;}
 }
 
 /* Extra small screens */
@@ -1066,6 +1067,11 @@ body::after{
     </div>
     <button class="btn gold" id="spin-btn" onclick="spinWheel()">⟳ SPIN</button>
     <div id="wheel-result"></div>
+    <div id="rebuy-wait" style="display:none">
+      <div style="font-size:11px;letter-spacing:3px;color:var(--red);text-shadow:0 0 10px var(--red);margin-top:14px">TAKE A BREAK</div>
+      <div style="font-size:10px;letter-spacing:2px;color:rgba(0,255,204,0.4);margin-top:8px">YOU'LL REJOIN NEXT ROUND</div>
+      <div id="break-dots" style="font-size:18px;letter-spacing:6px;color:var(--c);margin-top:12px;text-shadow:0 0 12px var(--c)">...</div>
+    </div>
   </div>
 </div>
 
@@ -1075,6 +1081,7 @@ body::after{
 <script>
 const socket = io({ transports: ['websocket', 'polling'] });
 let myName='', myRoom='', isHost=false, gameState=null;
+let pendingRebuyAmount=0; /* >0 means rebuy was earned but not yet confirmed */
 
 /* ─── Connection status ──────────────────── */
 const connEl = document.getElementById('conn-status');
@@ -1083,6 +1090,10 @@ socket.on('connect', () => {
   connEl.style.color = 'var(--c)';
   refreshRooms();
   socket.emit('sync_time');
+  /* Rejoin room if we were in one */
+  if(myName && myRoom){
+    socket.emit('join',{name:myName, room:myRoom});
+  }
 });
 socket.on('server_time', d => {
   window._serverTimeOffset = (Date.now()/1000) - d.t;
@@ -1122,14 +1133,27 @@ socket.on('joined', d => {
   document.getElementById('lobby').style.display='none';
   document.getElementById('game').style.display='flex';
   document.getElementById('start-btn').style.display=isHost?'block':'none';
+  /* Retry pending rebuy after reconnect */
+  if(pendingRebuyAmount>0){
+    socket.emit('rebuy',{amount:pendingRebuyAmount});
+    showToast(`⟳ REBUY $${pendingRebuyAmount.toLocaleString()} — WAITING FOR NEXT ROUND`);
+    pendingRebuyAmount=0;
+  }
 });
-socket.on('state', s => { gameState=s; render(s); });
+socket.on('state', s => {
+  /* Close rebuy overlay when next round starts */
+  if(waitingForNextRound && s.state==='playing'){
+    closeRebuyOverlay();
+  }
+  gameState=s; render(s);
+});
 socket.on('err', d => showToast(d.msg));
 socket.on('host_disconnected', () => {
   showToast('HOST DISCONNECTED — ROOM CLOSED');
   document.getElementById('game').style.display='none';
   document.getElementById('lobby').style.display='flex';
   stopTurnCountdown();
+  if(waitingForNextRound) closeRebuyOverlay();
 });
 
 /* ─── Actions ────────────────────────────── */
@@ -1246,15 +1270,51 @@ function spinWheel(){
     const resultEl=document.getElementById('wheel-result');
     resultEl.textContent=`◈ ${slice.label} ◈`;
     sfxWin();
-    /* close and rebuy after showing result */
+    /* send rebuy to server so player isn't removed, but keep overlay open */
     setTimeout(()=>{
-      document.getElementById('rebuy-overlay').classList.remove('show');
-      socket.emit('rebuy',{amount:slice.value});
+      if(socket.connected){
+        socket.emit('rebuy',{amount:slice.value});
+        pendingRebuyAmount=0;
+      } else {
+        pendingRebuyAmount=slice.value;
+      }
       if(slice.value>=5000) has5kFromRebuy++;
-      updateChipDisplay();
-      showToast(`⟳ REBUY ${slice.label} — BACK IN THE GAME`);
+      /* show "take a break" waiting screen */
+      document.getElementById('wheel-wrap').style.display='none';
+      document.getElementById('wheel-result').style.display='none';
+      document.getElementById('rebuy-subtitle').textContent=`REBUY: ${slice.label}`;
+      document.getElementById('rebuy-title').textContent='◈ SIT TIGHT ◈';
+      document.getElementById('rebuy-title').style.color='var(--c)';
+      document.getElementById('rebuy-wait').style.display='block';
+      waitingForNextRound=true;
+      animateBreakDots();
     },2000);
   },4200);
+}
+let waitingForNextRound=false;
+let breakDotsInterval=null;
+function animateBreakDots(){
+  const el=document.getElementById('break-dots');
+  let count=0;
+  clearInterval(breakDotsInterval);
+  breakDotsInterval=setInterval(()=>{
+    count=(count+1)%4;
+    el.textContent='.'.repeat(count||1).padEnd(3,'.');
+  },500);
+}
+function closeRebuyOverlay(){
+  waitingForNextRound=false;
+  clearInterval(breakDotsInterval);
+  document.getElementById('rebuy-overlay').classList.remove('show');
+  /* reset overlay to initial state for next use */
+  document.getElementById('wheel-wrap').style.display='';
+  document.getElementById('wheel-result').style.display='';
+  document.getElementById('rebuy-title').textContent='◈ BUSTED ◈';
+  document.getElementById('rebuy-title').style.color='';
+  document.getElementById('rebuy-subtitle').textContent='SPIN TO DETERMINE YOUR REBUY';
+  document.getElementById('rebuy-wait').style.display='none';
+  updateChipDisplay();
+  showToast('⟳ BACK IN THE GAME');
 }
 function doAction(t,a){socket.emit('action',{type:t,amount:a});}
 function doFold(){doAction('fold');}
@@ -1537,19 +1597,26 @@ function render(s){
   renderSeats(s);
   renderActions(s);
 
-  // Winner
+  // Winner — delay overlay 7s so players can see revealed cards
   const wo=document.getElementById('winner-overlay');
   if(s.state==='showdown'&&s.winner_info){
-    wo.classList.add('show');
-    document.getElementById('winner-text').textContent=`◈ ${s.winner_info.names.join(' & ')} ◈`;
-    let detail=`WINS $${s.winner_info.pot}`;
-    if(s.winner_info.hand) detail+=` · ${s.winner_info.hand.toUpperCase()}`;
-    document.getElementById('winner-detail').textContent=detail;
-    // Show rebuy button if you're busted
-    const you=s.players.find(p=>p.is_you);
-    const rebuyBtn=document.getElementById('rebuy-btn');
-    rebuyBtn.style.display=(you&&you.chips<=0)?'inline-block':'none';
+    if(!wo._delayTimer){
+      const winNames=s.winner_info.names.slice();
+      const winPot=s.winner_info.pot;
+      const winHand=s.winner_info.hand;
+      const youBusted=s.players.some(p=>p.is_you&&p.chips<=0);
+      wo._delayTimer=setTimeout(()=>{
+        wo.classList.add('show');
+        document.getElementById('winner-text').textContent=`◈ ${winNames.join(' & ')} ◈`;
+        let detail=`WINS $${winPot}`;
+        if(winHand) detail+=` · ${winHand.toUpperCase()}`;
+        document.getElementById('winner-detail').textContent=detail;
+        document.getElementById('rebuy-btn').style.display=youBusted?'inline-block':'none';
+        wo._delayTimer=null;
+      },7000);
+    }
   } else {
+    if(wo._delayTimer){clearTimeout(wo._delayTimer);wo._delayTimer=null;}
     wo.classList.remove('show');
     document.getElementById('rebuy-btn').style.display='none';
   }
