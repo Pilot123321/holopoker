@@ -1049,7 +1049,7 @@ body::after{
     <div id="winner-overlay">
       <div id="winner-text">◈ WINNER ◈</div>
       <div id="winner-detail"></div>
-      <button class="btn gold" onclick="doNext()">▶ NEXT HAND</button>
+      <div id="next-hand-timer" style="font-size:11px;letter-spacing:3px;color:rgba(0,255,204,0.4);margin-top:12px">NEXT HAND IN <span id="next-hand-secs">--</span>s</div>
       <button class="btn gold" id="rebuy-btn" onclick="openRebuyWheel()" style="display:none;margin-top:4px">⟳ SPIN TO REBUY</button>
     </div>
   </div>
@@ -1145,6 +1145,11 @@ socket.on('state', s => {
   if(waitingForNextRound && s.state==='playing'){
     closeRebuyOverlay();
   }
+  /* Reset card animations on new hand */
+  if(s.state==='playing' && gameState && gameState.state==='showdown'){
+    document.getElementById('community').dataset.count='0';
+    document.getElementById('your-cards').dataset.dealt='0';
+  }
   gameState=s; render(s);
 });
 socket.on('err', d => showToast(d.msg));
@@ -1167,11 +1172,6 @@ function doJoin(){
   socket.emit('join',{name,room});
 }
 function doStart(){socket.emit('start');}
-function doNext(){
-  document.getElementById('community').dataset.count='0';
-  document.getElementById('your-cards').dataset.dealt='0';
-  socket.emit('next_hand');
-}
 function doRebuy(){socket.emit('rebuy');}
 
 /* ─── Spin Wheel Rebuy ───────────────────── */
@@ -1600,6 +1600,14 @@ function render(s){
   // Winner — delay overlay 7s so players can see revealed cards
   const wo=document.getElementById('winner-overlay');
   if(s.state==='showdown'&&s.winner_info){
+    /* Start next-hand countdown */
+    if(s.next_hand_deadline && !wo._countdownInterval){
+      wo._countdownInterval=setInterval(()=>{
+        const left=Math.max(0,Math.ceil(s.next_hand_deadline+(window._serverTimeOffset||0)-Date.now()/1000));
+        document.getElementById('next-hand-secs').textContent=left;
+        if(left<=0) clearInterval(wo._countdownInterval);
+      },500);
+    }
     if(!wo._delayTimer){
       const winNames=s.winner_info.names.slice();
       const winPot=s.winner_info.pot;
@@ -1617,6 +1625,7 @@ function render(s){
     }
   } else {
     if(wo._delayTimer){clearTimeout(wo._delayTimer);wo._delayTimer=null;}
+    if(wo._countdownInterval){clearInterval(wo._countdownInterval);wo._countdownInterval=null;}
     wo.classList.remove('show');
     document.getElementById('rebuy-btn').style.display='none';
   }

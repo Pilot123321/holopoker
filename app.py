@@ -14,6 +14,8 @@ sid_info = {}   # sid -> (room_id, player_name)
 turn_timers = {}  # room_id -> turn generation counter
 turn_generation = {}  # room_id -> int (increments each new turn)
 TURN_TIMEOUT = 25  # seconds
+NEXT_HAND_DELAY = 15  # seconds after showdown before auto-dealing
+next_hand_gen = {}  # room_id -> int (generation counter for auto-next)
 
 
 def start_turn_timer(room_id):
@@ -45,6 +47,28 @@ def cancel_turn_timer(room_id):
     turn_generation[room_id] = turn_generation.get(room_id, 0) + 1
 
 
+def start_next_hand_timer(room_id):
+    """Auto-deal next hand after NEXT_HAND_DELAY seconds."""
+    game = rooms.get(room_id)
+    if not game:
+        return
+    gen = next_hand_gen.get(room_id, 0) + 1
+    next_hand_gen[room_id] = gen
+    game.next_hand_deadline = time.time() + NEXT_HAND_DELAY
+
+    def _auto_next():
+        socketio.sleep(NEXT_HAND_DELAY)
+        if next_hand_gen.get(room_id) != gen:
+            return
+        g = rooms.get(room_id)
+        if not g or g.state != 'showdown':
+            return
+        g.next_hand()
+        broadcast_and_timer(room_id)
+
+    socketio.start_background_task(_auto_next)
+
+
 def broadcast(room_id):
     game = rooms.get(room_id)
     if not game:
@@ -54,13 +78,19 @@ def broadcast(room_id):
         if game.state == 'playing' and hasattr(game, 'turn_deadline'):
             state['turn_deadline'] = game.turn_deadline
             state['turn_gen'] = getattr(game, 'turn_gen', 0)
+        if game.state == 'showdown' and hasattr(game, 'next_hand_deadline'):
+            state['next_hand_deadline'] = game.next_hand_deadline
         socketio.emit('state', state, to=p['sid'])
 
 
 def broadcast_and_timer(room_id):
     game = rooms.get(room_id)
-    if game and game.state == 'playing':
+    if not game:
+        return
+    if game.state == 'playing':
         start_turn_timer(room_id)
+    elif game.state == 'showdown':
+        start_next_hand_timer(room_id)
     broadcast(room_id)
 
 
