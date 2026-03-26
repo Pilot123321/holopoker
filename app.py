@@ -175,7 +175,7 @@ def on_next():
 
 
 @socketio.on('rebuy')
-def on_rebuy():
+def on_rebuy(data=None):
     info = sid_info.get(request.sid)
     if not info:
         return
@@ -183,7 +183,12 @@ def on_rebuy():
     game = rooms.get(room_id)
     if not game:
         return
-    ok, msg = game.rebuy(request.sid)
+    amount = 5000
+    if data and isinstance(data, dict):
+        amt = data.get('amount', 5000)
+        if isinstance(amt, (int, float)) and 1000 <= amt <= 5000:
+            amount = int(amt)
+    ok, msg = game.rebuy(request.sid, amount)
     if not ok:
         emit('err', {'msg': msg})
         return

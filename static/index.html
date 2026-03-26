@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>◈ HOLOPOKER</title>
 <script src="/socket.io.min.js"></script>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4258219975223019" crossorigin="anonymous"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 :root {
@@ -305,6 +304,13 @@ body::after{
   transition:none;
 }
 .chip-source.dim{opacity:.3;}
+.chip-source.convert-target{
+  filter:brightness(2) drop-shadow(0 0 16px #fff);
+  transform:perspective(140px) rotateX(28deg) scale(1.15);
+  outline:2px solid #fff;
+  outline-offset:4px;
+  border-radius:50%;
+}
 
 /* ═══════════════════════════════════════════
    3D BRICK CARDS
@@ -651,38 +657,67 @@ body::after{
 .player-dot{width:7px;height:7px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c),0 0 16px rgba(0,255,204,0.4);}
 
 /* AD OVERLAY */
-#ad-overlay{
+/* ═══════════════════════════════════════════
+   SPIN WHEEL OVERLAY
+═══════════════════════════════════════════ */
+#rebuy-overlay{
   display:none;position:fixed;inset:0;
   background:rgba(0,0,0,0.92);
   flex-direction:column;align-items:center;justify-content:center;gap:20px;
   z-index:200;backdrop-filter:blur(12px);
 }
-#ad-overlay.show{display:flex;}
-#ad-box{
-  width:480px;max-width:90vw;
+#rebuy-overlay.show{display:flex;}
+#rebuy-box{
   border:1px solid rgba(0,255,204,0.3);
   background:rgba(0,8,5,0.95);
   padding:30px 36px;
   text-align:center;
   box-shadow:0 0 40px rgba(0,255,204,0.15),3px 3px 0 rgba(0,255,204,0.2),6px 6px 0 rgba(0,255,204,0.1);
 }
-#ad-title{font-size:12px;letter-spacing:4px;color:rgba(0,255,204,0.4);margin-bottom:16px;}
-#ad-content{
-  border:1px dashed rgba(0,255,204,0.15);
-  padding:40px 20px;margin:14px 0;
-  min-height:180px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:rgba(0,255,204,0.02);
-  font-size:11px;letter-spacing:2px;color:rgba(0,255,204,0.3);
+#rebuy-title{font-size:14px;letter-spacing:5px;color:var(--red);text-shadow:0 0 12px var(--red);margin-bottom:8px;}
+#rebuy-subtitle{font-size:10px;letter-spacing:3px;color:rgba(0,255,204,0.4);margin-bottom:18px;}
+#wheel-wrap{
+  position:relative;
+  width:280px;height:280px;
+  margin:0 auto 18px;
 }
-#ad-timer{
-  font-size:42px;letter-spacing:6px;color:var(--c);
-  text-shadow:0 0 20px var(--c),0 0 60px rgba(0,255,204,0.3);
-  margin-top:16px;
+#wheel-canvas{
+  width:280px;height:280px;
+  filter:drop-shadow(0 0 20px rgba(0,255,204,0.3));
+  transition:transform 4s cubic-bezier(0.17,0.67,0.12,0.99);
 }
-#ad-skip{
-  margin-top:8px;font-size:10px;letter-spacing:2px;
-  color:rgba(0,255,204,0.25);
+#wheel-pointer{
+  position:absolute;
+  top:-8px;left:50%;transform:translateX(-50%);
+  width:0;height:0;
+  border-left:12px solid transparent;
+  border-right:12px solid transparent;
+  border-top:28px solid var(--gold);
+  filter:drop-shadow(0 0 8px var(--gold));
+  z-index:2;
+}
+#wheel-center{
+  position:absolute;
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  width:40px;height:40px;border-radius:50%;
+  background:var(--bg);
+  border:2px solid var(--c);
+  box-shadow:0 0 16px var(--c);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;letter-spacing:1px;color:var(--c);
+  z-index:2;
+}
+#spin-btn{
+  margin-top:6px;
+}
+#wheel-result{
+  font-size:24px;letter-spacing:4px;
+  color:var(--gold);text-shadow:0 0 16px var(--gold),0 0 40px rgba(255,221,0,0.4);
+  min-height:36px;margin-top:10px;
+}
+@keyframes wheelGlow{
+  0%,100%{filter:drop-shadow(0 0 20px rgba(0,255,204,0.3));}
+  50%{filter:drop-shadow(0 0 40px rgba(0,255,204,0.6)) brightness(1.1);}
 }
 
 /* WINNER OVERLAY */
@@ -1014,24 +1049,23 @@ body::after{
       <div id="winner-text">◈ WINNER ◈</div>
       <div id="winner-detail"></div>
       <button class="btn gold" onclick="doNext()">▶ NEXT HAND</button>
-      <button class="btn" id="rebuy-btn" onclick="startRebuyAd()" style="display:none;border-color:#ff9900;color:#ff9900;box-shadow:0 3px 0 rgba(255,153,0,.5),0 6px 0 rgba(255,153,0,.2),0 0 14px rgba(255,153,0,.2);margin-top:4px">⟳ REBUY — WATCH AD</button>
+      <button class="btn gold" id="rebuy-btn" onclick="openRebuyWheel()" style="display:none;margin-top:4px">⟳ SPIN TO REBUY</button>
     </div>
   </div>
 </div>
 
-<!-- AD OVERLAY -->
-<div id="ad-overlay">
-  <div id="ad-box">
-    <div id="ad-title">◈ SPONSOR MESSAGE ◈</div>
-    <div id="ad-content">
-      <ins class="adsbygoogle"
-        style="display:inline-block;width:468px;height:180px"
-        data-ad-client="ca-pub-4258219975223019"
-        data-ad-slot="auto"></ins>
-      <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+<!-- SPIN WHEEL REBUY OVERLAY -->
+<div id="rebuy-overlay">
+  <div id="rebuy-box">
+    <div id="rebuy-title">◈ BUSTED ◈</div>
+    <div id="rebuy-subtitle">SPIN TO DETERMINE YOUR REBUY</div>
+    <div id="wheel-wrap">
+      <div id="wheel-pointer"></div>
+      <canvas id="wheel-canvas" width="280" height="280"></canvas>
+      <div id="wheel-center">◈</div>
     </div>
-    <div id="ad-timer">5</div>
-    <div id="ad-skip">WATCH TO REBUY $5,000</div>
+    <button class="btn gold" id="spin-btn" onclick="spinWheel()">⟳ SPIN</button>
+    <div id="wheel-result"></div>
   </div>
 </div>
 
@@ -1116,27 +1150,111 @@ function doNext(){
 }
 function doRebuy(){socket.emit('rebuy');}
 
-/* ─── Ad / Rebuy ─────────────────────────── */
-let adTimer=null;
-function startRebuyAd(){
-  const overlay=document.getElementById('ad-overlay');
-  const timerEl=document.getElementById('ad-timer');
+/* ─── Spin Wheel Rebuy ───────────────────── */
+const WHEEL_SLICES=[
+  {label:'$1,000', value:1000, color:'#ff3344'},
+  {label:'$2,000', value:2000, color:'#cc55ff'},
+  {label:'$3,000', value:3000, color:'#44bbff'},
+  {label:'$1,000', value:1000, color:'#ff3344'},
+  {label:'$5,000', value:5000, color:'#ffdd00'},
+  {label:'$2,000', value:2000, color:'#cc55ff'},
+  {label:'$1,500', value:1500, color:'#ff9900'},
+  {label:'$3,000', value:3000, color:'#44bbff'},
+  {label:'$1,000', value:1000, color:'#ff3344'},
+  {label:'$4,000', value:4000, color:'#00ffcc'},
+];
+let wheelAngle=0, wheelSpinning=false;
+
+function drawWheel(){
+  const c=document.getElementById('wheel-canvas');
+  const ctx=c.getContext('2d');
+  const cx=140,cy=140,r=130;
+  const n=WHEEL_SLICES.length;
+  const arc=2*Math.PI/n;
+  ctx.clearRect(0,0,280,280);
+  for(let i=0;i<n;i++){
+    const a=i*arc-Math.PI/2;
+    /* slice fill */
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,a,a+arc);ctx.closePath();
+    ctx.fillStyle=WHEEL_SLICES[i].color+'22';
+    ctx.fill();
+    ctx.strokeStyle=WHEEL_SLICES[i].color+'66';
+    ctx.lineWidth=1.5;ctx.stroke();
+    /* label */
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(a+arc/2);
+    ctx.fillStyle=WHEEL_SLICES[i].color;
+    ctx.font='bold 13px "Share Tech Mono",monospace';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor=WHEEL_SLICES[i].color;ctx.shadowBlur=8;
+    ctx.fillText(WHEEL_SLICES[i].label,r*0.62,0);
+    ctx.restore();
+  }
+  /* outer ring */
+  ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);
+  ctx.strokeStyle='rgba(0,255,204,0.5)';ctx.lineWidth=2;ctx.stroke();
+  /* tick marks */
+  for(let i=0;i<n;i++){
+    const a=i*arc-Math.PI/2;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));
+    ctx.lineTo(cx+Math.cos(a)*(r+1),cy+Math.sin(a)*(r+1));
+    ctx.strokeStyle='rgba(0,255,204,0.6)';ctx.lineWidth=2;ctx.stroke();
+  }
+}
+
+function openRebuyWheel(){
+  const overlay=document.getElementById('rebuy-overlay');
   overlay.classList.add('show');
-  let sec=5;
-  timerEl.textContent=sec;
-  clearInterval(adTimer);
-  adTimer=setInterval(()=>{
-    sec--;
-    timerEl.textContent=sec;
-    if(sec<=0){
-      clearInterval(adTimer);
-      overlay.classList.remove('show');
-      doRebuy();
-      has5kFromRebuy++;
+  wheelSpinning=false;
+  document.getElementById('spin-btn').style.display='inline-block';
+  document.getElementById('wheel-result').textContent='';
+  document.getElementById('wheel-canvas').style.transform='rotate(0deg)';
+  wheelAngle=0;
+  drawWheel();
+}
+
+function spinWheel(){
+  if(wheelSpinning) return;
+  wheelSpinning=true;
+  document.getElementById('spin-btn').style.display='none';
+  const n=WHEEL_SLICES.length;
+  const arc=360/n;
+  /* pick random landing slice */
+  const targetIdx=Math.floor(Math.random()*n);
+  /* spin 5-8 full rotations + land in middle of target slice */
+  const fullSpins=(5+Math.floor(Math.random()*4))*360;
+  const sliceAngle=targetIdx*arc+arc/2;
+  /* pointer is at top (0°), wheel rotates clockwise
+     to land slice i under pointer: rotate so that slice center aligns with top */
+  const finalAngle=fullSpins+(360-sliceAngle);
+  wheelAngle=finalAngle;
+  const canvas=document.getElementById('wheel-canvas');
+  canvas.style.transform=`rotate(${finalAngle}deg)`;
+  sfxClick();
+  /* tick sounds during spin */
+  let ticks=0;
+  const tickInterval=setInterval(()=>{
+    ticks++;
+    sfxTick();
+    if(ticks>15) clearInterval(tickInterval);
+  },200);
+  /* result after spin stops */
+  setTimeout(()=>{
+    clearInterval(tickInterval);
+    const slice=WHEEL_SLICES[targetIdx];
+    const resultEl=document.getElementById('wheel-result');
+    resultEl.textContent=`◈ ${slice.label} ◈`;
+    sfxWin();
+    /* close and rebuy after showing result */
+    setTimeout(()=>{
+      document.getElementById('rebuy-overlay').classList.remove('show');
+      socket.emit('rebuy',{amount:slice.value});
+      if(slice.value>=5000) has5kFromRebuy++;
       updateChipDisplay();
-      showToast('⟳ REBUY $5,000 — BACK IN THE GAME');
-    }
-  },1000);
+      showToast(`⟳ REBUY ${slice.label} — BACK IN THE GAME`);
+    },2000);
+  },4200);
 }
 function doAction(t,a){socket.emit('action',{type:t,amount:a});}
 function doFold(){doAction('fold');}
@@ -1191,6 +1309,30 @@ function clearChips(){
   pendingBet = 0;
   for(const k in pendingChips) pendingChips[k]=0;
   updateChipDisplay();
+}
+function convertChip(fromVal, toVal){
+  /* Convert one high-value chip into multiple lower-value chips */
+  if(fromVal <= toVal) return false;
+  if(fromVal % toVal !== 0) return false;
+  const avail = chipInv[fromVal] - pendingChips[fromVal];
+  if(avail <= 0) return false;
+  const count = fromVal / toVal;
+  chipInv[fromVal]--;
+  chipInv[toVal] += count;
+  updateChipDisplay();
+  return true;
+}
+function getConvertTarget(x, y){
+  /* Find a lower-value chip-source element under the cursor */
+  const els = document.querySelectorAll('.chip-source');
+  for(const el of els){
+    const tv = parseInt(el.dataset.val);
+    if(tv >= dragVal) continue; // only convert to lower
+    if(dragVal % tv !== 0) continue; // must divide evenly
+    const r = el.getBoundingClientRect();
+    if(x>=r.left && x<=r.right && y>=r.top && y<=r.bottom) return el;
+  }
+  return null;
 }
 function updateChipDisplay(){
   document.getElementById('chip-amount').textContent = pendingBet;
@@ -1262,6 +1404,10 @@ function moveDrag(e){
   const dz=dropZone.getBoundingClientRect();
   const over=x>=dz.left&&x<=dz.right&&y>=dz.top&&y<=dz.bottom;
   dropZone.classList.toggle('hover',over);
+  /* Highlight convert target */
+  document.querySelectorAll('.chip-source.convert-target').forEach(el=>el.classList.remove('convert-target'));
+  const target=getConvertTarget(x,y);
+  if(target) target.classList.add('convert-target');
 }
 
 function endDrag(e){
@@ -1275,11 +1421,22 @@ function endDrag(e){
   }
   const x=e.clientX||(e.changedTouches&&e.changedTouches[0].clientX)||0;
   const y=e.clientY||(e.changedTouches&&e.changedTouches[0].clientY)||0;
-  const dz=dropZone.getBoundingClientRect();
-  const dropped=x>=dz.left&&x<=dz.right&&y>=dz.top&&y<=dz.bottom;
-  if(dropped){
-    addChip(dragVal);
+  /* Check for chip-to-chip conversion first */
+  const target=getConvertTarget(x,y);
+  if(target){
+    const toVal=parseInt(target.dataset.val);
+    if(convertChip(dragVal, toVal)){
+      sfxChipDrop();
+      showToast(`⟳ $${dragVal} → ${dragVal/toVal}×$${toVal}`);
+    }
+  } else {
+    const dz=dropZone.getBoundingClientRect();
+    const dropped=x>=dz.left&&x<=dz.right&&y>=dz.top&&y<=dz.bottom;
+    if(dropped){
+      addChip(dragVal);
+    }
   }
+  document.querySelectorAll('.chip-source.convert-target').forEach(el=>el.classList.remove('convert-target'));
   dragChip.remove();
   dragChip=null;
   if(dragSource) dragSource.classList.remove('dim');
