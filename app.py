@@ -94,6 +94,10 @@ def broadcast_and_timer(room_id):
     broadcast(room_id)
 
 
+@app.route('/health')
+def health():
+    return 'ok', 200
+
 @app.route('/')
 def index():
     return send_from_directory(os.path.join(BASE, 'static'), 'index.html')
