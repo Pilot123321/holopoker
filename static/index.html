@@ -1520,7 +1520,7 @@ function endDrag(e){
     const toVal=parseInt(target.dataset.val);
     if(convertChip(dragVal, toVal)){
       sfxChipDrop();
-      showToast(`⟳ $${dragVal} → ${dragVal/toVal}×$${toVal}`);
+      showToast(`⟳ $${dragVal} → ${dragVal/toVal}×$${toVal}`, '#cc55ff');
     }
   } else {
     const dz=dropZone.getBoundingClientRect();
@@ -1851,9 +1851,16 @@ function makeSlot(sz='sz-md'){
 
 /* ─── TOAST ──────────────────────────────── */
 let toastT;
-function showToast(msg){
+function showToast(msg, color){
   const t=document.getElementById('toast');
   t.textContent='⚠ '+msg;t.style.display='block';
+  if(color){
+    t.style.color=color;t.style.borderColor=color;
+    t.style.background=color.replace(')',',0.12)').replace('rgb','rgba');
+    t.style.boxShadow=`0 3px 0 ${color}66,0 6px 0 ${color}33,0 0 20px ${color}44`;
+  } else {
+    t.style.color='';t.style.borderColor='';t.style.background='';t.style.boxShadow='';
+  }
   clearTimeout(toastT);toastT=setTimeout(()=>t.style.display='none',3500);
 }
 
