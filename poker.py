@@ -160,6 +160,7 @@ class PokerGame:
         self.last_action = None
         self.action_required = set()
         self.hand_names = {}
+        self.hand_result = None
 
     def add_player(self, sid, name):
         if len(self.players) >= 7:
@@ -169,7 +170,7 @@ class PokerGame:
         self.players.append({
             'sid': sid, 'name': name, 'chips': 5100,
             'hand': [], 'bet': 0, 'folded': False, 'all_in': False,
-            'is_bot': False,
+            'is_bot': False, 'cosmetics': {},
         })
         return True, 'OK'
 
@@ -190,7 +191,7 @@ class PokerGame:
         self.players.append({
             'sid': sid, 'name': name, 'chips': 5100,
             'hand': [], 'bet': 0, 'folded': False, 'all_in': False,
-            'is_bot': True,
+            'is_bot': True, 'cosmetics': {},
         })
         return True, name
 
@@ -217,7 +218,7 @@ class PokerGame:
         self.players.append({
             'sid': sid, 'name': name, 'chips': 0,
             'hand': [], 'bet': 0, 'folded': True, 'all_in': False,
-            'is_bot': False,
+            'is_bot': False, 'cosmetics': {},
         })
         return True
 
@@ -413,6 +414,11 @@ class PokerGame:
             'hand': reason,
         }
         self.dealer_idx = (self.dealer_idx + 1) % len(self.players)
+        self.hand_result = {
+            'participants': [p['name'] for p in self.players if not self.is_bot(p)],
+            'winners': [w['name'] for w in winners if not self.is_bot(w)],
+            'pot': self.pot,
+        }
 
     def rebuy(self, sid, amount=5000):
         p = self.get_player(sid)
@@ -463,6 +469,7 @@ class PokerGame:
                 'is_you': p['sid'] == viewer_sid,
                 'is_bot': self.is_bot(p),
                 'hand_name': hand_name,
+                'cosmetics': p.get('cosmetics', {}),
             })
         vp = self.get_player(viewer_sid) if viewer_sid else None
         call_amt = max(0, self.current_bet - vp['bet']) if vp else 0
@@ -479,4 +486,5 @@ class PokerGame:
             'your_turn': self.can_act(viewer_sid) if viewer_sid else False,
             'call_amount': call_amt,
             'can_check': can_check,
+            'your_credits': vp.get('holo_credits', 0) if vp else 0,
         }

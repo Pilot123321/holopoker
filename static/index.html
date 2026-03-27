@@ -1087,6 +1087,15 @@ body::after{
 const socket = io({ transports: ['websocket', 'polling'] });
 let myName='', myRoom='', isHost=false, gameState=null;
 let pendingRebuyAmount=0; /* >0 means rebuy was earned but not yet confirmed */
+let myToken=''; /* reconnect token for secure session */
+
+/* ─── XSS Prevention ──────────────────────── */
+function esc(s){
+  if(!s) return '';
+  const d=document.createElement('div');
+  d.textContent=String(s);
+  return d.innerHTML;
+}
 
 /* ─── Connection status ──────────────────── */
 const connEl = document.getElementById('conn-status');
@@ -1097,7 +1106,8 @@ socket.on('connect', () => {
   socket.emit('sync_time');
   /* Rejoin room if we were in one */
   if(myName && myRoom){
-    socket.emit('join',{name:myName, room:myRoom});
+    const saved=localStorage.getItem('hpt_'+myRoom+'_'+myName);
+    socket.emit('join',{name:myName, room:myRoom, token:saved||myToken});
   }
 });
 socket.on('server_time', d => {
@@ -1124,7 +1134,7 @@ socket.on('rooms', list => {
     row.className='room-row';
     const stCls=r.state==='waiting'?'waiting':r.state==='playing'?'playing':'showdown';
     const stTxt=r.state==='waiting'?'WAITING':r.state==='playing'?'IN GAME':'SHOWDOWN';
-    row.innerHTML=`<div class="room-id">${r.id}</div><div class="room-info">${r.players}/${r.max}<div class="room-state ${stCls}">${stTxt}</div></div>`;
+    row.innerHTML=`<div class="room-id">${esc(r.id)}</div><div class="room-info">${parseInt(r.players)||0}/${parseInt(r.max)||7}<div class="room-state ${stCls}">${stTxt}</div></div>`;
     row.onclick=()=>{document.getElementById('inp-room').value=r.id;};
     inner.appendChild(row);
   });
@@ -1133,6 +1143,10 @@ socket.on('rooms', list => {
 /* ─── Socket ─────────────────────────────── */
 socket.on('joined', d => {
   myRoom=d.room; myName=d.name; isHost=d.host;
+  if(d.token){
+    myToken=d.token;
+    try{localStorage.setItem('hpt_'+d.room+'_'+d.name, d.token);}catch(e){}
+  }
   document.getElementById('room-display').textContent='SECTOR: '+d.room;
   document.getElementById('you-display').textContent='▸ '+d.name;
   document.getElementById('lobby').style.display='none';
@@ -1142,7 +1156,7 @@ socket.on('joined', d => {
   /* Retry pending rebuy after reconnect */
   if(pendingRebuyAmount>0){
     socket.emit('rebuy',{amount:pendingRebuyAmount});
-    showToast(`⟳ REBUY $${pendingRebuyAmount.toLocaleString()} — WAITING FOR NEXT ROUND`);
+    showToast('REBUY $'+(parseInt(pendingRebuyAmount)||0)+' — WAITING FOR NEXT ROUND');
     pendingRebuyAmount=0;
   }
 });
@@ -1175,17 +1189,20 @@ function goLobby(){
   document.getElementById('rebuy-overlay').classList.remove('show');
   if(waitingForNextRound) closeRebuyOverlay();
   stopTurnCountdown();
-  myName=''; myRoom='';
+  myName=''; myRoom=''; myToken='';
   refreshRooms();
 }
 function doJoin(){
   const name=document.getElementById('inp-name').value.trim();
-  const room=document.getElementById('inp-room').value.trim();
+  const room=document.getElementById('inp-room').value.trim().toUpperCase();
   const errEl=document.getElementById('lobby-err');
   if(!name||!room){errEl.textContent='⚠ ENTER NAME AND ROOM CODE';return;}
+  if(!/^[A-Za-z0-9 _\-]{1,16}$/.test(name)){errEl.textContent='⚠ NAME: LETTERS, NUMBERS, SPACES, HYPHENS ONLY';return;}
+  if(!/^[A-Z0-9]{1,6}$/.test(room)){errEl.textContent='⚠ ROOM CODE: LETTERS AND NUMBERS ONLY';return;}
   if(!socket.connected){errEl.textContent='⚠ NOT CONNECTED TO SERVER — REFRESH PAGE';return;}
   errEl.textContent='';
-  socket.emit('join',{name,room});
+  const saved=localStorage.getItem('hpt_'+room+'_'+name);
+  socket.emit('join',{name,room,token:saved||null});
 }
 function doStart(){socket.emit('start');}
 function doRebuy(){socket.emit('rebuy');}
@@ -1543,9 +1560,9 @@ document.addEventListener('keydown', e => {
   if(n>=1 && n<=9 && gameState && gameState.your_turn && gameState.state==='playing'){
     const bet = n * 100;
     const minR = Math.max((gameState.current_bet||0)*2, (gameState.current_bet||0)+20, 40);
-    const finalBet = Math.max(bet, minR);
+    const finalBet = Math.min(Math.max(bet, minR), 1000000);
     doAction('raise', finalBet);
-    showToast(`⚡ QUICK BET $${finalBet} (${n}×$100)`);
+    showToast(`QUICK BET $${finalBet}`);
   }
 });
 
@@ -1556,10 +1573,10 @@ function render(s){
   const gv=document.getElementById('game-view');
   gv.style.display='flex';
 
-  document.getElementById('pot').textContent=`◈ POT: $${s.pot}`;
-  document.getElementById('stage-label').textContent=s.stage?s.stage.toUpperCase():'——';
+  document.getElementById('pot').textContent=`◈ POT: $${parseInt(s.pot)||0}`;
+  document.getElementById('stage-label').textContent=s.stage?String(s.stage).toUpperCase():'——';
   const lastActEl=document.getElementById('last-act');
-  lastActEl.textContent=s.last_action||'';
+  lastActEl.textContent=String(s.last_action||'');
   const isTimeout=s.last_action&&(s.last_action.includes('TIMEOUT')||s.last_action.includes('DISCONNECTED'));
   lastActEl.classList.toggle('timeout',isTimeout);
 
@@ -1584,9 +1601,9 @@ function render(s){
   const youInfoEl=document.getElementById('you-info');
   if(you){
     youInfoEl.style.display='block';
-    document.getElementById('you-name').textContent=(you.is_dealer?'D · ':'')+you.name;
-    document.getElementById('you-chips').textContent='$'+you.chips;
-    document.getElementById('you-bet').textContent=you.bet>0?'BET $'+you.bet:you.folded?'FOLDED':you.all_in?'ALL-IN':'';
+    document.getElementById('you-name').textContent=(you.is_dealer?'D · ':'')+String(you.name);
+    document.getElementById('you-chips').textContent='$'+(parseInt(you.chips)||0);
+    document.getElementById('you-bet').textContent=you.bet>0?'BET $'+(parseInt(you.bet)||0):you.folded?'FOLDED':you.all_in?'ALL-IN':'';
     rebuildChipInv(you.chips);
   } else {
     youInfoEl.style.display='none';
@@ -1625,9 +1642,9 @@ function render(s){
       },500);
     }
     if(!wo._delayTimer){
-      const winNames=s.winner_info.names.slice();
-      const winPot=s.winner_info.pot;
-      const winHand=s.winner_info.hand;
+      const winNames=(s.winner_info.names||[]).map(n=>String(n));
+      const winPot=parseInt(s.winner_info.pot)||0;
+      const winHand=String(s.winner_info.hand||'');
       const youBusted=s.players.some(p=>p.is_you&&p.chips<=0);
       wo._delayTimer=setTimeout(()=>{
         wo.classList.add('show');
@@ -1656,7 +1673,7 @@ function renderWaiting(s){
   s.players.forEach(p=>{
     const r=document.createElement('div');
     r.className='player-row';
-    r.innerHTML=`<div class="player-dot"${p.is_bot?' style="background:var(--c2);box-shadow:0 0 8px var(--c2)"':''}></div><span style="letter-spacing:2px">${p.name}</span>${p.is_you?' <span style="color:rgba(0,255,204,0.4);font-size:9px">YOU</span>':''}${p.is_bot?' <span style="color:var(--c2);font-size:9px;letter-spacing:1px">BOT</span>':''}${p.is_dealer?'<span class="dealer-chip">D</span>':''}`;
+    r.innerHTML=`<div class="player-dot"${p.is_bot?' style="background:var(--c2);box-shadow:0 0 8px var(--c2)"':''}></div><span style="letter-spacing:2px">${esc(p.name)}</span>${p.is_you?' <span style="color:rgba(0,255,204,0.4);font-size:9px">YOU</span>':''}${p.is_bot?' <span style="color:var(--c2);font-size:9px;letter-spacing:1px">BOT</span>':''}${p.is_dealer?'<span class="dealer-chip">D</span>':''}`;
     inner.appendChild(r);
   });
 }
@@ -1685,11 +1702,11 @@ function renderSeats(s){
     else if(p.all_in) status='<span style="color:var(--gold)">ALL-IN</span>';
     else if(p.is_current&&s.state==='playing') status='<span style="color:var(--c)">◈ ACTING</span>';
     const dealer=p.is_dealer?'<span class="dealer-chip">D</span>':'';
-    const handName=p.hand_name?`<div class="pp-hand-name">${p.hand_name}</div>`:'';
+    const handName=p.hand_name?`<div class="pp-hand-name">${esc(p.hand_name)}</div>`:'';
     card.innerHTML=`
-      <div class="pp-name">${p.name}${dealer}</div>
-      <div class="pp-chips">$${p.chips}</div>
-      ${p.bet>0?`<div class="pp-bet">BET $${p.bet}</div>`:''}
+      <div class="pp-name">${esc(p.name)}${dealer}</div>
+      <div class="pp-chips">$${parseInt(p.chips)||0}</div>
+      ${p.bet>0?`<div class="pp-bet">BET $${parseInt(p.bet)||0}</div>`:''}
       <div class="pp-status">${status}</div>
       <div class="pp-cards">${seatCards(p,s.state)}</div>
       ${handName}`;
