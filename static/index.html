@@ -190,7 +190,8 @@ body::after{
   padding:10px 28px;border-bottom:1px solid rgba(0,255,204,0.15);
   flex-shrink:0;background:rgba(0,8,5,0.7);backdrop-filter:blur(4px);
 }
-#hdr .title{font-size:16px;letter-spacing:5px;text-shadow:0 0 12px var(--c);}
+#hdr .title{font-size:16px;letter-spacing:5px;text-shadow:0 0 12px var(--c);transition:color .2s,text-shadow .2s;}
+#hdr .title:hover{color:#fff;text-shadow:0 0 20px var(--c),0 0 40px rgba(0,255,204,0.5);}
 #hdr .room-code{font-size:20px;letter-spacing:7px;color:var(--c2);text-shadow:0 0 12px var(--c2);}
 #hdr .you-badge{font-size:11px;letter-spacing:2px;color:rgba(0,255,204,0.45);}
 #bgm-btn{
@@ -954,6 +955,7 @@ body::after{
 <div id="lobby">
   <div class="logo">◈ HOLOPOKER</div>
   <div class="logo-sub">TEXAS HOLD'EM // MULTIPLAYER</div>
+  <div style="font-size:10px;letter-spacing:2px;color:rgba(0,255,204,0.3);margin-top:4px">SAFE AND HEALTHY POKER FOR EVERYBODY</div>
   <div style="display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;justify-content:center;">
     <div class="lobby-box">
       <label>CALL SIGN</label>
@@ -974,7 +976,7 @@ body::after{
 <!-- GAME -->
 <div id="game">
   <div id="hdr">
-    <div class="title">◈ HOLOPOKER</div>
+    <div class="title" id="logo-btn" style="cursor:pointer" onclick="goLobby()">◈ HOLOPOKER</div>
     <div class="room-code" id="room-display">——</div>
     <div class="you-badge" id="you-display">——</div>
     <button id="bgm-btn" onclick="toggleBGM()" title="Toggle Music">♫</button>
@@ -1162,6 +1164,16 @@ socket.on('host_disconnected', () => {
 });
 
 /* ─── Actions ────────────────────────────── */
+function goLobby(){
+  document.getElementById('game').style.display='none';
+  document.getElementById('lobby').style.display='flex';
+  document.getElementById('winner-overlay').classList.remove('show');
+  document.getElementById('rebuy-overlay').classList.remove('show');
+  if(waitingForNextRound) closeRebuyOverlay();
+  stopTurnCountdown();
+  myName=''; myRoom='';
+  refreshRooms();
+}
 function doJoin(){
   const name=document.getElementById('inp-name').value.trim();
   const room=document.getElementById('inp-room').value.trim();
