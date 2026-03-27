@@ -53,6 +53,96 @@ def evaluate_hand(cards):
             best = s
     return best
 
+BOT_NAMES = ['NEXUS', 'CIPHER', 'GHOST', 'WRAITH', 'PRISM', 'RAVEN', 'VOLT']
+_bot_counter = 0
+
+def _preflop_strength(hand):
+    """Rate hole cards 0.0-1.0 for preflop decisions."""
+    r1, r2 = RANK_VAL[hand[0]['rank']], RANK_VAL[hand[1]['rank']]
+    hi, lo = max(r1, r2), min(r1, r2)
+    paired = r1 == r2
+    suited = hand[0]['suit'] == hand[1]['suit']
+    gap = hi - lo
+    score = (hi + lo) / 24.0  # base: high cards are better
+    if paired:
+        score += 0.3 + hi / 24.0  # pairs are strong
+    if suited:
+        score += 0.06
+    if gap <= 1 and not paired:
+        score += 0.04  # connectors
+    if gap >= 5:
+        score -= 0.05
+    return max(0.0, min(1.0, score))
+
+
+def bot_decide(player, game):
+    """Return (action_type, amount) for a bot player. Low-mid skill."""
+    p = player
+    hand = p['hand']
+    comm = game.community
+    call_cost = game.current_bet - p['bet']
+    can_check = call_cost <= 0
+    pot = game.pot
+
+    # Evaluate hand strength
+    if comm:
+        hole = [Card(c['rank'], c['suit']) for c in hand]
+        board = [Card(c['rank'], c['suit']) for c in comm]
+        score = evaluate_hand(hole + board)
+        hand_rank = score[0]  # 0=high card .. 9=royal flush
+        # Normalize to 0.0-1.0
+        strength = (hand_rank + 0.5) / 10.0
+        # Boost for very strong hands
+        if hand_rank >= 3:
+            strength = min(1.0, strength + 0.15)
+    else:
+        # Preflop — use hole card strength
+        strength = _preflop_strength(hand)
+
+    # Add randomness (imperfect play)
+    strength += random.uniform(-0.12, 0.12)
+    strength = max(0.0, min(1.0, strength))
+
+    # Decision thresholds (low-mid level)
+    if can_check:
+        if strength > 0.65 and random.random() < 0.5:
+            # Raise sometimes with good hands
+            raise_amt = max(game.current_bet * 2, game.BB * 2)
+            raise_amt = min(raise_amt, p['bet'] + p['chips'])
+            if raise_amt > game.current_bet and raise_amt - p['bet'] <= p['chips']:
+                return 'raise', raise_amt
+        return 'check', 0
+    else:
+        # Must call or fold
+        pot_odds = call_cost / (pot + call_cost) if (pot + call_cost) > 0 else 1.0
+
+        if strength > 0.7:
+            # Strong — raise sometimes
+            if random.random() < 0.35:
+                raise_amt = max(game.current_bet * 2, game.BB * 3)
+                raise_amt = min(raise_amt, p['bet'] + p['chips'])
+                if raise_amt > game.current_bet and raise_amt - p['bet'] <= p['chips']:
+                    return 'raise', raise_amt
+            return 'call', 0
+
+        if strength > 0.4:
+            # Medium — call if price is right, sometimes fold
+            if pot_odds < 0.4 or random.random() < 0.7:
+                return 'call', 0
+            return 'fold', 0
+
+        if strength > 0.25:
+            # Weak — sometimes bluff-call, usually fold
+            if random.random() < 0.25:
+                return 'call', 0
+            return 'fold', 0
+
+        # Very weak — fold (occasionally bluff)
+        if random.random() < 0.08:
+            return 'call', 0
+        return 'fold', 0
+
+
 class PokerGame:
     def __init__(self, room_id):
         self.room_id = room_id
@@ -79,8 +169,34 @@ class PokerGame:
         self.players.append({
             'sid': sid, 'name': name, 'chips': 5100,
             'hand': [], 'bet': 0, 'folded': False, 'all_in': False,
+            'is_bot': False,
         })
         return True, 'OK'
+
+    def add_bot(self):
+        global _bot_counter
+        if len(self.players) >= 7:
+            return False, 'Table full'
+        used = {p['name'] for p in self.players}
+        name = None
+        for n in BOT_NAMES:
+            if f'BOT-{n}' not in used:
+                name = f'BOT-{n}'
+                break
+        if not name:
+            return False, 'No bot names left'
+        _bot_counter += 1
+        sid = f'bot_{_bot_counter}'
+        self.players.append({
+            'sid': sid, 'name': name, 'chips': 5100,
+            'hand': [], 'bet': 0, 'folded': False, 'all_in': False,
+            'is_bot': True,
+        })
+        return True, name
+
+    @staticmethod
+    def is_bot(player):
+        return player.get('is_bot', False)
 
     def remove_player(self, sid):
         self.players = [p for p in self.players if p['sid'] != sid]
@@ -101,6 +217,7 @@ class PokerGame:
         self.players.append({
             'sid': sid, 'name': name, 'chips': 0,
             'hand': [], 'bet': 0, 'folded': True, 'all_in': False,
+            'is_bot': False,
         })
         return True
 
@@ -307,6 +424,10 @@ class PokerGame:
         return True, 'OK'
 
     def next_hand(self):
+        # Auto-rebuy busted bots
+        for p in self.players:
+            if self.is_bot(p) and p['chips'] <= 0:
+                p['chips'] = random.choice([2000, 3000, 4000, 5000])
         self.players = [p for p in self.players if p['chips'] > 0]
         if len(self.players) < 2:
             self.state = 'waiting'
@@ -314,6 +435,15 @@ class PokerGame:
         self.state = 'playing'
         self.new_hand()
         return True, 'OK'
+
+    def current_player_is_bot(self):
+        """Return the current player if it's a bot's turn, else None."""
+        if self.state != 'playing':
+            return None
+        cp = self.players[self.current_player_idx]
+        if self.is_bot(cp) and not cp['folded'] and not cp['all_in']:
+            return cp
+        return None
 
     def to_dict(self, viewer_sid=None):
         showdown = self.state == 'showdown'
@@ -331,6 +461,7 @@ class PokerGame:
                 'is_current': i == self.current_player_idx and self.state == 'playing',
                 'is_dealer': i == self.dealer_idx,
                 'is_you': p['sid'] == viewer_sid,
+                'is_bot': self.is_bot(p),
                 'hand_name': hand_name,
             })
         vp = self.get_player(viewer_sid) if viewer_sid else None

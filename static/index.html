@@ -986,7 +986,10 @@ body::after{
     <!-- Waiting room -->
     <div id="waiting">
       <div id="player-list"><h3>◦ CONNECTED OPERATORS</h3><div id="p-list-inner"></div></div>
-      <button class="btn" id="start-btn" onclick="doStart()" style="display:none">▶ INITIALIZE GAME</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+        <button class="btn" id="start-btn" onclick="doStart()" style="display:none">▶ INITIALIZE GAME</button>
+        <button class="btn" id="bot-btn" onclick="socket.emit('add_bot')" style="display:none;border-color:var(--c2);color:var(--c2);text-shadow:0 0 8px var(--c2);box-shadow:0 3px 0 rgba(204,255,0,0.4),0 6px 0 rgba(204,255,0,0.2),0 0 14px rgba(204,255,0,0.2)">+ ADD BOT</button>
+      </div>
       <div style="font-size:10px;letter-spacing:3px;color:rgba(0,255,204,0.25)">STANDBY — AWAITING HOST</div>
     </div>
 
@@ -1135,6 +1138,7 @@ socket.on('joined', d => {
   document.getElementById('lobby').style.display='none';
   document.getElementById('game').style.display='flex';
   document.getElementById('start-btn').style.display=isHost?'block':'none';
+  document.getElementById('bot-btn').style.display=isHost?'block':'none';
   /* Retry pending rebuy after reconnect */
   if(pendingRebuyAmount>0){
     socket.emit('rebuy',{amount:pendingRebuyAmount});
@@ -1652,7 +1656,7 @@ function renderWaiting(s){
   s.players.forEach(p=>{
     const r=document.createElement('div');
     r.className='player-row';
-    r.innerHTML=`<div class="player-dot"></div><span style="letter-spacing:2px">${p.name}</span>${p.is_you?' <span style="color:rgba(0,255,204,0.4);font-size:9px">YOU</span>':''}${p.is_dealer?'<span class="dealer-chip">D</span>':''}`;
+    r.innerHTML=`<div class="player-dot"${p.is_bot?' style="background:var(--c2);box-shadow:0 0 8px var(--c2)"':''}></div><span style="letter-spacing:2px">${p.name}</span>${p.is_you?' <span style="color:rgba(0,255,204,0.4);font-size:9px">YOU</span>':''}${p.is_bot?' <span style="color:var(--c2);font-size:9px;letter-spacing:1px">BOT</span>':''}${p.is_dealer?'<span class="dealer-chip">D</span>':''}`;
     inner.appendChild(r);
   });
 }

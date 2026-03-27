@@ -1,9 +1,10 @@
 import os
 import time
+import random
 import threading
 from flask import Flask, send_from_directory, request
 from flask_socketio import SocketIO, emit, join_room
-from poker import PokerGame
+from poker import PokerGame, bot_decide
 
 BASE = os.path.dirname(__file__)
 app = Flask(__name__, static_folder=os.path.join(BASE, 'static'))
@@ -74,6 +75,8 @@ def broadcast(room_id):
     if not game:
         return
     for p in game.players:
+        if game.is_bot(p):
+            continue  # don't emit to fake bot SIDs
         state = game.to_dict(viewer_sid=p['sid'])
         if game.state == 'playing' and hasattr(game, 'turn_deadline'):
             state['turn_deadline'] = game.turn_deadline
@@ -89,9 +92,37 @@ def broadcast_and_timer(room_id):
         return
     if game.state == 'playing':
         start_turn_timer(room_id)
+        schedule_bot_play(room_id)
     elif game.state == 'showdown':
         start_next_hand_timer(room_id)
     broadcast(room_id)
+
+
+def schedule_bot_play(room_id):
+    """If current player is a bot, auto-play after a short delay."""
+    game = rooms.get(room_id)
+    if not game:
+        return
+    bot = game.current_player_is_bot()
+    if not bot:
+        return
+    gen = turn_generation.get(room_id, 0)
+
+    def _bot_act():
+        socketio.sleep(1.5 + random.random() * 2)  # 1.5-3.5s delay
+        if turn_generation.get(room_id) != gen:
+            return
+        g = rooms.get(room_id)
+        if not g or g.state != 'playing':
+            return
+        b = g.current_player_is_bot()
+        if not b:
+            return
+        action, amount = bot_decide(b, g)
+        g.action(b['sid'], action, amount)
+        broadcast_and_timer(room_id)
+
+    socketio.start_background_task(_bot_act)
 
 
 @app.route('/health')
@@ -167,6 +198,28 @@ def on_join(data):
     sid_info[request.sid] = (room_id, name)
     join_room(room_id)
     emit('joined', {'room': room_id, 'name': name, 'host': len(game.players) == 1})
+    broadcast(room_id)
+
+
+@socketio.on('add_bot')
+def on_add_bot():
+    info = sid_info.get(request.sid)
+    if not info:
+        return
+    room_id, _ = info
+    game = rooms.get(room_id)
+    if not game:
+        return
+    if game.state != 'waiting':
+        emit('err', {'msg': 'Can only add bots in waiting room'})
+        return
+    if len(game.players) == 0 or game.players[0]['sid'] != request.sid:
+        emit('err', {'msg': 'Only host can add bots'})
+        return
+    ok, msg = game.add_bot()
+    if not ok:
+        emit('err', {'msg': msg})
+        return
     broadcast(room_id)
 
 
