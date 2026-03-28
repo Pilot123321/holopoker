@@ -425,7 +425,7 @@ def on_rebuy(data=None):
     info = sid_info.get(request.sid)
     if not info:
         return
-    room_id, _ = info
+    room_id, name = info
     game = rooms.get(room_id)
     if not game:
         return
@@ -434,6 +434,12 @@ def on_rebuy(data=None):
         amt = data.get('amount', 5000)
         if isinstance(amt, (int, float)) and 1000 <= amt <= 5000:
             amount = int(amt)
+    # If player was removed (busted + next_hand already fired), re-add them
+    if not game.get_player(request.sid):
+        if not game.rejoin_player(request.sid, name):
+            emit('err', {'msg': 'Cannot rejoin room'})
+            return
+
     ok, msg = game.rebuy(request.sid, amount)
     if not ok:
         emit('err', {'msg': msg})
