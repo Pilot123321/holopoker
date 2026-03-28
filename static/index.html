@@ -227,7 +227,7 @@ body::after{
   flex-shrink:0;
 }
 #table{
-  width:700px;height:290px;
+  width:820px;height:340px;
   border:2px solid var(--c);
   border-radius:145px;
   background:
@@ -388,15 +388,15 @@ body::after{
 .cb.sz-sm .rank{font-size:8px;}
 .cb.sz-sm .suit-big{font-size:14px;}
 
-.cb.sz-md{width:52px;height:72px;}
-.cb.sz-md .cb-top{height:9px;}
-.cb.sz-md .cb-right{width:9px;}
+.cb.sz-md{width:62px;height:86px;}
+.cb.sz-md .cb-top{height:10px;}
+.cb.sz-md .cb-right{width:10px;}
 
-.cb.sz-lg{width:72px;height:100px;}
-.cb.sz-lg .cb-top{height:12px;}
-.cb.sz-lg .cb-right{width:12px;}
-.cb.sz-lg .rank{font-size:14px;}
-.cb.sz-lg .suit-big{font-size:32px;}
+.cb.sz-lg{width:86px;height:120px;}
+.cb.sz-lg .cb-top{height:14px;}
+.cb.sz-lg .cb-right{width:14px;}
+.cb.sz-lg .rank{font-size:16px;}
+.cb.sz-lg .suit-big{font-size:38px;}
 
 /* SUIT COLORS */
 .cb.spade,.cb.club{
@@ -492,7 +492,7 @@ body::after{
 }
 #you-info{display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:center;}
 #you-name{font-size:11px;letter-spacing:2px;color:var(--c2);text-shadow:0 0 8px var(--c2);}
-#you-chips{font-size:13px;color:var(--gold);text-shadow:0 0 8px var(--gold);}
+#you-chips{font-size:24px;font-weight:bold;color:var(--gold);text-shadow:0 0 12px var(--gold),0 0 28px rgba(255,221,0,0.4);letter-spacing:3px;}
 #you-bet{font-size:10px;color:var(--c2);letter-spacing:1px;}
 #your-cards{display:flex;gap:16px;align-items:flex-end;}
 #your-label{font-size:9px;letter-spacing:4px;color:rgba(0,255,204,0.35);}
@@ -836,7 +836,7 @@ body::after{
   #your-label{font-size:8px;letter-spacing:3px;}
   #you-info{gap:10px;}
   #you-name{font-size:10px;}
-  #you-chips{font-size:11px;}
+  #you-chips{font-size:18px;}
   #you-bet{font-size:9px;}
 
   /* ACTION PANEL */
@@ -1856,7 +1856,13 @@ function showToast(msg, color){
   t.textContent='⚠ '+msg;t.style.display='block';
   if(color){
     t.style.color=color;t.style.borderColor=color;
-    t.style.background=color.replace(')',',0.12)').replace('rgb','rgba');
+    /* Convert hex to rgba for translucent background */
+    if(color.startsWith('#')){
+      const r=parseInt(color.slice(1,3),16),g=parseInt(color.slice(3,5),16),b=parseInt(color.slice(5,7),16);
+      t.style.background=`rgba(${r},${g},${b},0.12)`;
+    } else {
+      t.style.background=color.replace(')',',0.12)').replace('rgb','rgba');
+    }
     t.style.boxShadow=`0 3px 0 ${color}66,0 6px 0 ${color}33,0 0 20px ${color}44`;
   } else {
     t.style.color='';t.style.borderColor='';t.style.background='';t.style.boxShadow='';
